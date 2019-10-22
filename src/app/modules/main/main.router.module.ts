@@ -7,7 +7,13 @@ const routes: Routes = [
         path: '', component: MainComponent
     },
     {
-        path: '**', redirectTo: '/main'
+        path: 'meeting',
+        // loadChildren: () => import("../meeting/meeting.module").then(m => m.MeetingModule),
+        loadChildren: "../meeting/meeting.module#MeetingModule"
+    },
+    {
+        path: '**', 
+        redirectTo: 'main'
     },
 ];
 
@@ -15,4 +21,4 @@ const routes: Routes = [
     imports: [RouterModule.forChild(routes)],
     exports: [RouterModule]
 })
-export class MainRoutingModule {}
+export class MainRouterModule {}
