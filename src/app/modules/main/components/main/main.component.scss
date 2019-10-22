@@ -1,0 +1,100 @@
+/*
+    overflow properties:
+    - hidden
+    - scroll
+    - visible
+    - auto
+*/
+
+// This makes sure that the padding and border are included in the total width and height of all elements.
+
+* {
+    box-sizing: border-box;
+}
+
+.mat-divider {
+    margin-bottom: 10px;
+}
+
+.mat-form-field {
+    width: 100%;
+}
+
+.chatroom-container {
+    display: flex;
+    flex-direction: column;
+    // justify-content: space-between;
+    margin: 10px;
+    padding: 10px;
+    // width: 100%;
+    overflow: hidden;
+    height: auto;
+}
+
+.chatroom-heading {
+    display: flex; 
+    justify-content: space-between;
+}
+
+h2, h4 {
+    margin-bottom: 10px;
+    margin-top: 10px;
+}
+
+.chatroom-details {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+}
+
+
+.chatroom-join {
+    margin-right: 10px;
+}
+
+.join-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.chatroom-create {
+    // display: flex;
+    // justify-content: flex-end;
+    margin: 10px 0;
+
+}
+
+ 
+.chatroom-list {
+    margin-left: 10px;
+}
+
+.item-button {
+    display: none;
+}
+
+.list-item {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.mat-list-item, .mat-list-item-content {
+    padding: 0 !important;
+}
+
+.mat-list-item:hover {
+    .item-button {
+        display: inline;
+    }
+}
+
+.chatroom-join, .chatroom-list  {
+    width: 50%;
+}
+
+.mat-card {
+    width: auto;
+}

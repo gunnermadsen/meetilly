@@ -1,0 +1,48 @@
+<div class="chatroom-container">
+
+    <div class="chatroom-heading">
+        <h2>Dashboard</h2>
+        <div class="chatroom-create">
+            <button mat-raised-button color="primary" (click)="createChatRoom()">Create new chatroom <mat-icon>add
+                </mat-icon></button>
+        </div>
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <div class="chatroom-details">
+
+        <div class="chatroom-join">
+            <mat-card>
+                <div class="join-title">
+                    <h4>Join a Chatroom</h4>
+                </div>
+                <mat-form-field appearance="outline">
+                    <mat-label>Enter the Chatroom Number</mat-label>
+                    <input matInput >
+                </mat-form-field>
+                <div class="join-actions">
+                    <button mat-raised-button color="primary">Join Chat</button>
+                </div>
+            </mat-card>
+        </div>
+    
+        <div class="chatroom-list">
+            <mat-card>
+                <div class="list-title">
+                    <h4>Chatrooms</h4>
+                    <mat-divider></mat-divider>
+                </div>
+                <mat-list>
+                    <mat-list-item *ngFor="let chatroom of chatrooms; index as i">
+                        <div class="list-item">
+                            <div class="item-name">{{ chatroom }}</div>
+                            <button class="item-button" mat-icon-button><mat-icon>more_vert</mat-icon></button>
+                        </div>
+                        <mat-divider *ngIf="i < (chatrooms.length - 1)"></mat-divider>
+                    </mat-list-item>
+                </mat-list>
+            </mat-card>
+        </div>
+    </div>
+</div>
