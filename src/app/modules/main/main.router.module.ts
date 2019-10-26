@@ -1,6 +1,9 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { MainComponent } from './components/main/main.component';
+import { MeetingToolComponent } from './components/meeting-tool/meeting-tool.component';
+import { MeetingComponent } from '../meeting/components/meeting/meeting.component';
+import { MeetingVerificationResolver } from '../../core/guards/verify-meeting.guard';
 
 const routes: Routes = [
     {
@@ -8,11 +11,15 @@ const routes: Routes = [
     },
     {
         path: 'meeting',
-        // loadChildren: () => import("../meeting/meeting.module").then(m => m.MeetingModule),
-        loadChildren: "../meeting/meeting.module#MeetingModule"
+        children: [
+            {
+                path: ':mode',
+                component: MeetingToolComponent
+            }
+        ]
     },
     {
-        path: '**', 
+        path: '**',
         redirectTo: 'main'
     },
 ];

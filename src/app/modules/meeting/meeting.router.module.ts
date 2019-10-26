@@ -1,16 +1,12 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
-import { MeetingToolComponent } from './components/meeting-tool/meeting-tool.component';
+import { MeetingToolComponent } from '../main/components/meeting-tool/meeting-tool.component';
+import { MeetingComponent } from './components/meeting/meeting.component';
 
 const routes: Routes = [
     { 
-        path: '', // index route
-        children: [
-            {
-                path: ':mode',
-                component: MeetingToolComponent
-            }
-        ] 
+        path: '',
+        component: MeetingComponent
     }
 ];
 

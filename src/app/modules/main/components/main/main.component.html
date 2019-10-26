@@ -3,8 +3,7 @@
     <div class="chatroom-heading">
         <h2>Dashboard</h2>
         <div class="chatroom-create">
-            <button mat-raised-button color="primary" (click)="routeToPath('/main/meeting/new')">Create new chatroom <mat-icon>add
-                </mat-icon></button>
+            <button mat-raised-button color="primary" (click)="routeToPath('/main/meeting/new')">Create new meeting <mat-icon>add</mat-icon></button>
         </div>
     </div>
 
@@ -14,34 +13,44 @@
 
         <div class="chatroom-join">
             <mat-card>
-                <div class="join-title">
-                    <h4>Join a Chatroom</h4>
-                </div>
-                <mat-form-field appearance="outline">
-                    <mat-label>Enter the Chatroom Number</mat-label>
-                    <input matInput >
-                </mat-form-field>
-                <div class="join-actions">
-                    <button mat-raised-button color="primary">Join Chat</button>
-                </div>
+                <form [formGroup]="form">
+                    <div class="join-title">
+                        <h4>Join a Chatroom</h4>
+                    </div>
+                    <mat-form-field appearance="outline">
+                        <mat-label>Enter the Chatroom Number</mat-label>
+                        <input matInput formControlName="MeetingNumber">
+                    </mat-form-field>
+                    <div class="join-actions">
+                        <button mat-raised-button (click)="joinMeetingAsGuest()" color="primary">Join Meeting</button>
+                    </div>
+                </form>
             </mat-card>
         </div>
     
         <div class="chatroom-list">
             <mat-card>
                 <div class="list-title">
-                    <h4>Chatrooms</h4>
+                    <h4>Meetings</h4>
                     <mat-divider></mat-divider>
                 </div>
-                <mat-list>
-                    <mat-list-item *ngFor="let chatroom of chatrooms; index as i">
+                <div class="meetings">
+                    <div class="meeting" *ngFor="let meeting of (meetings$ | async); index as i">
                         <div class="list-item">
-                            <div class="item-name">{{ chatroom }}</div>
-                            <button class="item-button" mat-icon-button><mat-icon>more_vert</mat-icon></button>
+                            <div class="meeting-name">{{ meeting.Name }}</div>
+                            <mat-menu #menu="matMenu">
+                                <button mat-menu-item (click)="startMeetingAsHost($event, meeting.Code)">Start meeting</button>
+                                <mat-divider></mat-divider>
+                                <button mat-menu-item>Delete</button>
+                                <button mat-menu-item>Edit</button>
+                            </mat-menu>
+                            <button class="item-button" mat-icon-button [matMenuTriggerFor]="menu">
+                                <mat-icon>more_vert</mat-icon>
+                            </button>
                         </div>
-                        <mat-divider *ngIf="i < (chatrooms.length - 1)"></mat-divider>
-                    </mat-list-item>
-                </mat-list>
+                        <mat-divider *ngIf="i < (meetings$ | async).length - 1"></mat-divider>
+                    </div> 
+                </div>
             </mat-card>
         </div>
     </div>

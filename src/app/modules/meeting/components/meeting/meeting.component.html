@@ -1,1 +1,25 @@
-<p>meeting works!</p>
+<div class="meeting-progress-container" *ngIf="!isStreamingReady">
+    <!-- Loading indicator to show while waiting for other meeting members to join -->
+
+    <div class="meeting-progress">
+        <div class="meeting-progress-title">
+            <h2>Waiting for others to join the meeting</h2>
+        </div>
+        <div class="meeting-progress-bar">
+            <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+        </div>
+    </div>
+</div>
+
+<div class="meeting-container" *ngIf="isStreamingReady">
+    <div class="video-container">
+        <div class="video-wrap">
+            <div class="main-video">
+                <video autoplay #mainVideoArea></video>
+            </div>
+            <div class="small-video">
+                <video autoplay muted #smallVideoArea></video>
+            </div>
+        </div>
+    </div>
+</div>

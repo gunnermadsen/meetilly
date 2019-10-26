@@ -3,13 +3,25 @@ import { NgModule } from '@angular/core';
 
 import { AppRouterModule } from './app.router.module';
 import { AppComponent } from './app.component';
-import { CoreModule } from './core/core.module';
-import { HomeModule } from './modules/home/home.module';
-import { RegisterComponent } from './modules/home/components/register/register.component';
-import { LoginComponent } from './modules/home/components/login/login.component';
-import { SharedModule } from './shared/shared.module';
+import { CoreModule } from '@/core/core.module';
+import { HomeModule } from '@/modules/home/home.module';
+import { RegisterComponent } from '@/modules/home/components/register/register.component';
+import { LoginComponent } from '@/modules/home/components/login/login.component';
+import { SharedModule } from '@/shared/shared.module';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
+import { SocketIoModule, SocketIoConfig } from 'ngx-socket-io';
+
+export const config: SocketIoConfig = {
+  url: 'http://localhost:3434',
+  options: {
+    transports: [ 'websocket' ],
+    reconnection: true,
+    timeout: 20000,
+    reconnectionDelay: 1500,
+    
+  }
+}
 
 @NgModule({
   declarations: [
@@ -23,7 +35,8 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
     BrowserAnimationsModule,
     CoreModule,
     SharedModule,
-    HomeModule
+    HomeModule,
+    SocketIoModule.forRoot(config)
 
   ],
   providers: [],

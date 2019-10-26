@@ -1,0 +1,26 @@
+<form [formGroup]="form">
+    <div class="meeting-tool-container">
+        <mat-card>
+            <div class="meeting-title">
+                <h3>Create a new meeting</h3>
+                <mat-divider></mat-divider>
+            </div>
+            <mat-form-field appearance="outline">
+                <mat-label>Name</mat-label>
+                <input matInput formControlName="Name">
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+                <mat-label>Description</mat-label>
+                <textarea matInput rows="5" formControlName="Description"></textarea>
+            </mat-form-field>
+            <!-- <div class="meeting-options">
+                <mat-checkbox formControlName="MeetingAudio">Audio</mat-checkbox>
+                <mat-checkbox formControlName="MeetingVideo">Video</mat-checkbox>
+            </div> -->
+
+            <div class="meeting-actions">
+                <button mat-raised-button color="primary" (click)="save()">Save</button>
+            </div>
+        </mat-card>
+    </div>
+</form>

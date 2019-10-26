@@ -8,10 +8,10 @@ import { EffectsModule } from '@ngrx/effects';
 import { ToastrModule } from 'ngx-toastr';
 
 import { StoreDevtoolsModule } from '@ngrx/store-devtools';
-import { environment } from 'src/environments/environment';
-import { reducers, metaReducers } from '../reducers';
-import { URLInterceptorService } from './interceptors/jwt.interceptor.service';
-import { HttpErrorInterceptor } from './interceptors/http-error.interceptor.service';
+import { environment } from '@env/environment';
+import { reducers, metaReducers } from '@/reducers';
+import { URLInterceptorService } from '@/core/interceptors/jwt.interceptor.service';
+import { HttpErrorInterceptor } from '@/core/interceptors/http-error.interceptor.service';
 
 @NgModule({
     declarations: [],

@@ -2,11 +2,11 @@ import { Component, OnInit } from '@angular/core'
 import { FormGroup, FormBuilder, Validators, AbstractControl } from '@angular/forms'
 import { Store } from '@ngrx/store'
 
-import { AppState } from 'src/app/reducers'
-import { InvalidCharacterValidator } from 'src/app/shared/validators/invalid-characters.validator'
-import { PasswordStrengthValidator } from 'src/app/shared/validators/password-strength.validator'
-import { PasswordMatchValidator } from 'src/app/shared/validators/password-match.validator'
-import { registerUserRequested } from 'src/app/core/authentication/store/actions/authentication.actions'
+import { AppState } from '@/reducers'
+import { InvalidCharacterValidator } from '@/shared/validators/invalid-characters.validator'
+import { PasswordStrengthValidator } from '@/shared/validators/password-strength.validator'
+import { PasswordMatchValidator } from '@/shared/validators/password-match.validator'
+import { registerUserRequested } from '@/core/authentication/store/actions/authentication.actions'
 
 @Component({
   selector: 'app-register',

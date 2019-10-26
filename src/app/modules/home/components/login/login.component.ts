@@ -2,9 +2,9 @@ import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Store } from '@ngrx/store';
-import { InvalidCharacterValidator } from 'src/app/shared/validators/invalid-characters.validator';
-import { AppState } from 'src/app/reducers';
-import { authenticateUserRequested } from 'src/app/core/authentication/store/actions/authentication.actions';
+import { InvalidCharacterValidator } from '@/shared/validators/invalid-characters.validator';
+import { AppState } from '@/reducers';
+import { authenticateUserRequested } from '@/core/authentication/store/actions/authentication.actions';
 
 
 @Component({

@@ -4,28 +4,26 @@ import { isPlatformBrowser } from '@angular/common'
 
 import { Observable, of, EMPTY } from 'rxjs'
 
-import { Action } from '@ngrx/store'
+import { Action, Store } from '@ngrx/store'
 import { Actions, ofType, createEffect, OnInitEffects } from '@ngrx/effects'
 import { exhaustMap, catchError, tap, map } from 'rxjs/operators'
 
 import { ToastrService } from 'ngx-toastr'
 
-import { HttpAuthService } from 'src/app/core/http/auth.http.service'
+import { HttpAuthService } from '@/core/http/auth.http.service'
 
 
-import * as account from '../actions/authentication.actions'
+import * as account from '@/core/authentication/store/actions/authentication.actions'
+import { AppState } from '@/reducers'
 
 @Injectable()
 export class AuthenticationEffects implements OnInitEffects {
-
-    constructor(private actions$: Actions, private authService: HttpAuthService, private toastrService: ToastrService, private router: Router, @Inject(PLATFORM_ID) private platformId: object) { }
-
     public registerUserRequested$: Observable<Action> = createEffect(() => this.actions$.pipe(
         ofType(account.registerUserRequested),
 
-        exhaustMap((action: any): Observable<any> => {
+        exhaustMap((payload: any): Observable<any> => {
 
-            return this.authService.register(action.payload.user).pipe(
+            return this.authService.register(payload.user).pipe(
 
                 map((payload: any): Action => account.registrationSuccessful(payload)),
 
@@ -99,16 +97,15 @@ export class AuthenticationEffects implements OnInitEffects {
         })
     ), { dispatch: false })
 
-
-    public checkAuthenticationStatus$: Observable<Action | void> = createEffect(() => this.actions$.pipe(
+    public checkAuthenticationStatus$: Observable<Action | any> = createEffect(() => this.actions$.pipe(
         ofType(account.checkAuthenticationStatus),
-        tap(() => {
+        map(() => {
             if (isPlatformBrowser(this.platformId)) {
                 // Client only code.
                 const user = JSON.parse(localStorage.getItem("Account"))
 
-                if (user && user.JWTToken) {
-                    return account.authenticateUserSuccessful({ account: user })
+                if (user) {
+                    return of(this.store$.dispatch(account.authenticateUserSuccessful({ account: user })))
                 } else {
                     return EMPTY
                 }
@@ -116,8 +113,9 @@ export class AuthenticationEffects implements OnInitEffects {
         })
     ), { dispatch: false })
 
-
-    ngrxOnInitEffects(): any {
+    constructor(private actions$: Actions, private authService: HttpAuthService, private toastrService: ToastrService, private router: Router, @Inject(PLATFORM_ID) private platformId: object, private store$: Store<AppState>) { }
+    
+    ngrxOnInitEffects(): Action {
         return account.checkAuthenticationStatus()
     }
 

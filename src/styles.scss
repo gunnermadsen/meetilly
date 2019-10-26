@@ -6,24 +6,28 @@
 @import '~ngx-toastr/toastr';
 
 // Imports functions, variables, and mixins that are needed by other Bootstrap files
-// @import "variables";
-// @import "../node_modules/bootstrap/scss/functions";
-// @import "../node_modules/bootstrap/scss/variables";
-// @import "../node_modules/bootstrap/scss/mixins";
+@import "variables";
+@import "../node_modules/bootstrap/scss/functions";
+@import "../node_modules/bootstrap/scss/variables";
+@import "../node_modules/bootstrap/scss/mixins";
 
 // Import Bootstrap Reboot
-// @import "../node_modules/bootstrap/scss/reboot";
+@import "../node_modules/bootstrap/scss/reboot";
 
 // Import Bootstrap Grid System
-// @import "../node_modules/bootstrap/scss/grid"; 
+@import "../node_modules/bootstrap/scss/grid"; 
 
 // Import Bootstrap CSS Utilities
-// @import "../node_modules/bootstrap/scss/utilities"; 
+@import "../node_modules/bootstrap/scss/utilities"; 
 
 // Import Bootstrap CSS Breadcrumb 
 // @import "../node_modules/bootstrap/scss/breadcrumb";
 
-// @import "reset";
+// Import Bootstrap CSS Progress
+@import "../node_modules/bootstrap/scss/progress";
+
+
+@import "reset";
 
 
 

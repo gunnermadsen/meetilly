@@ -23,7 +23,7 @@
 .chatroom-container {
     display: flex;
     flex-direction: column;
-    // justify-content: space-between;
+    justify-content: center;
     margin: 10px;
     padding: 10px;
     // width: 100%;
@@ -41,15 +41,12 @@ h2, h4 {
     margin-top: 10px;
 }
 
-.chatroom-details {
-    display: flex;
-    flex-direction: row;
-    justify-content: space-between;
-}
+
 
 
 .chatroom-join {
     margin-right: 10px;
+    width: 450px;
 }
 
 .join-actions {
@@ -64,32 +61,47 @@ h2, h4 {
 
 }
 
- 
-.chatroom-list {
-    margin-left: 10px;
+// Meeting List Styles
+
+.chatroom-details {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
 }
 
-.item-button {
-    display: none;
+.meetings {
+    display: flex;
+    flex-direction: column;
+    margin: 5px;
+}
+
+.chatroom-list {
+    margin-left: 10px;
+    width: 450px;
+
 }
 
 .list-item {
     display: flex;
+    margin: 5px 0;
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
     width: 100%;
 }
 
-.mat-list-item, .mat-list-item-content {
-    padding: 0 !important;
-}
-
-.mat-list-item:hover {
+.meeting:hover {
     .item-button {
         display: inline;
+        // border: 1px solid blue
     }
 }
+
+
+.item-button {
+    display: block;
+}
+
 
 .chatroom-join, .chatroom-list  {
     width: 50%;
