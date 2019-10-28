@@ -1,8 +1,8 @@
 import { Component, OnInit, ViewChild, ElementRef, OnDestroy, ViewEncapsulation, ChangeDetectorRef } from '@angular/core'
 import { ActivatedRoute } from '@angular/router'
-import { takeUntil, map } from 'rxjs/operators'
+import { takeUntil, map, startWith, delay, endWith, tap } from 'rxjs/operators'
 import { MeetingService } from '../../../main/services/meeting.service'
-import { Subject, merge } from 'rxjs'
+import { Subject, merge, Observable, fromEvent, BehaviorSubject } from 'rxjs'
 
 import { IPayload } from '../../../main/models/payload.model'
 
@@ -16,18 +16,27 @@ import { FormGroup, FormControl } from '@angular/forms'
   encapsulation: ViewEncapsulation.None 
 })
 export class MeetingComponent implements OnInit, OnDestroy {
+  @ViewChild('smallVideoArea', { static: false }) private _smallVideoArea: ElementRef<HTMLVideoElement>
+  @ViewChild('mainVideoArea', { static: false }) private _mainVideoArea: ElementRef<HTMLVideoElement>
+  @ViewChild('screenShareVideoArea', { static: false }) private _screenShareVideoArea: ElementRef<HTMLVideoElement>
+  @ViewChild('videoContainer', { static: false }) private _videoContainer: ElementRef<HTMLElement>
+  @ViewChild('screenShareContainer', { static: false }) private _screenShareContainer: ElementRef<HTMLElement>
   private messengerForm: FormGroup
   private _url: string = null
   public connection: RTCPeerConnection
   private dataChannel: RTCDataChannel
   private _webcamStream: MediaStream = null
+  private _displayStream: MediaStream = null
   private _transceiver: (track: MediaStreamTrack) => RTCRtpTransceiver
   private _meetingID: number = null
   private _member: string = null
   public meetingData: any = null
   private _type: string = null
   private destroy$: Subject<boolean> = new Subject<boolean>()
+  private _displayControls$: BehaviorSubject<boolean> = new BehaviorSubject<boolean>(true)
+  public displayControls$: Observable<boolean> = this._displayControls$.asObservable()
   public isStreamingReady: boolean = false
+  public isVideoConfereneMode: boolean = false
   public logMode: string = null
   // public messages: any[] = Array.from({ length: 10 }).map((_: any, index: number) => {
   //   return {
@@ -37,9 +46,8 @@ export class MeetingComponent implements OnInit, OnDestroy {
   //   }
   // })
   public messages: any[] = []
-
-  @ViewChild('smallVideoArea', { static: false }) private _smallVideoArea: ElementRef<HTMLVideoElement>
-  @ViewChild('mainVideoArea', { static: false }) private _mainVideoArea: ElementRef<HTMLVideoElement>
+  public isMuted: boolean = false
+  public isDashboardHidden: boolean = false
 
   constructor(private _route: ActivatedRoute, private _meetingService: MeetingService, private _cdr: ChangeDetectorRef) {
     this._initializeMessenger()
@@ -110,6 +118,13 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
     // reveal the meeting room
     this.isStreamingReady = true
+
+    // fromEvent(document, 'mousemove').pipe(
+    //   tap(() => this._displayControls$.next(true)),
+    //   delay(5000),
+    //   tap(() => this._displayControls$.next(false)),
+    //   takeUntil(this.destroy$)
+    // ).subscribe()
   }
 
   private _handleSocketMessageEvent(event?: IPayload) {
@@ -189,12 +204,14 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
     switch (state) {
       case "closed":
-        this._closeVideoCall(state)
+        this.endVideoConference(state)
+        this.closeMeeting()
         break
       case "failed":
       case "disconnected":
         this.logEvent(`---> Peer connection has '${state}'. Attempting to reconnect to ${this._type}`)
-        this._closeVideoCall(state)
+        this.endVideoConference(state)
+        this.closeMeeting()
         // this.connection.createOffer({ iceRestart: true })
         this._checkForReadiness()
         // this._initializeMeeting()
@@ -310,34 +327,6 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
       try {
 
-        const constraints: MediaStreamConstraints = {
-          audio: true,
-          video: {
-            width: { min: 1280, ideal: 1280, max: 1920 },
-            height: { min: 720, ideal: 720, max: 1080 }
-          }
-        }
-
-        this._webcamStream = await navigator.mediaDevices.getUserMedia(constraints)
-        this.logEvent(`---> Acquired user media for ${this.logMode}`)
-
-        this._smallVideoArea.nativeElement.srcObject = this._webcamStream
-        this.logEvent(`---> Added webcam stream to small video area element on ${this.logMode}`)
-
-        this._webcamStream.getTracks().forEach((track: MediaStreamTrack) => {
-          this.connection.addTrack(track, this._webcamStream)
-          this.logEvent(`---> Added track: ${track.label}; to connection`)
-        })
-
-        // this._webcamStream.getTracks().forEach(this._transceiver = track => this.connection.addTransceiver(track, { streams: [this._webcamStream] }));
-
-      } catch (error) {
-        this._handleGetUserMediaError(error)
-        return
-      }
-
-      try {
-
         if (this.connection.signalingState === "have-remote-offer" || this.connection.signalingState === "have-local-pranswer") {
           this.logEvent("---> Creating and Sending Answer to Caller")
           const answer: RTCSessionDescriptionInit = await this.connection.createAnswer()
@@ -378,29 +367,29 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
   }
 
-  private _closeVideoCall(state: string) {
+  public endVideoConference(state: string) {
 
-    this.logEvent("Closing the call")
+    this.logEvent("Closing the Video Conference")
 
     if (this.connection) {
-      this.logEvent("--> Closing the peer connection events")
-
-      this.connection.ontrack = null
-      this.connection.onicecandidate = null
-      this.connection.oniceconnectionstatechange = null
-      this.connection.onsignalingstatechange = null
-      this.connection.onicegatheringstatechange = null
-      this.connection.onnegotiationneeded = null
-
-      this.dataChannel.onmessage = null
-      this.dataChannel.onopen = null
-
-      // this.connection.getTransceivers().forEach((track: RTCRtpTransceiver) => track.stop())
+      this.logEvent("--> Closing the MediaStream Tracks")
 
       if (this._smallVideoArea.nativeElement.srcObject) {
         this._smallVideoArea.nativeElement.pause()
         this._webcamStream.getTracks().forEach((stream: MediaStreamTrack) => stream.stop())
       }
+
+      this._videoContainer.nativeElement.style.display = 'none'
+
+      this.isVideoConfereneMode = !this.isVideoConfereneMode
+
+    }
+  }
+
+  public closeMeeting(): void {
+    if (this.connection) {
+
+      this.connection.getTransceivers().forEach((track: RTCRtpTransceiver) => track.stop())
 
       this.logEvent("--> Closing the peer connection")
       this.logEvent("--> Closing the data channel")
@@ -410,12 +399,89 @@ export class MeetingComponent implements OnInit, OnDestroy {
       this.connection = null
       this.dataChannel = null
       this._webcamStream = null
+      this._displayStream = null
+    }
+  }
+
+  public muteMicrophone(event: MouseEvent): void {
+    this.isMuted = !this.isMuted
+    this._webcamStream.getAudioTracks()[0].enabled = !this._webcamStream.getAudioTracks()[0].enabled
+  }
+
+  public async enterVideoConferenceMode(event: MouseEvent): Promise<void> {
+    this.logEvent(`*** Entering Video Conference mode`)
+
+    this.isDashboardHidden = true
+
+    this._videoContainer.nativeElement.style.display = 'inline-block'
+
+    if (!this.connection) {
+      this._initializePeerConnection()
     }
 
-    // Disable the hangup button
+    try {
 
-    // document.getElementById("hangup-button").disabled = true
-    // targetUsername = null
+      const constraints: MediaStreamConstraints = {
+        audio: true,
+        video: {
+          width: { min: 1280, ideal: 1280, max: 1920 },
+          height: { min: 720, ideal: 720, max: 1080 }
+        }
+      }
+
+      this._webcamStream = await navigator.mediaDevices.getUserMedia(constraints)
+      this.logEvent(`---> Acquired user media for ${this.logMode}`)
+
+      this._smallVideoArea.nativeElement.srcObject = this._webcamStream
+      this.logEvent(`---> Added webcam stream to small video area element on ${this.logMode}`)
+
+      this._addTracksToConnection(this._webcamStream)
+
+    } catch (error) {
+      this._handleGetUserMediaError(error)
+      return
+    }
+  }
+
+  public async enterScreenSharingMode(event: MouseEvent): Promise<void> {
+    try {
+      this.logEvent(`*** Entering Screen Sharing Mode`)
+
+      const constraints = {
+        audio: true,
+        video: {
+          width: { min: 1280, ideal: 1280, max: 1920 },
+          height: { min: 720, ideal: 720, max: 1080 }
+        }
+      }
+
+      if (adapter.browserDetails.browser === 'firefox') {
+        adapter.browserShim.shimGetDisplayMedia(window, 'screen')
+      }
+      
+      this._displayStream = await navigator.mediaDevices.getDisplayMedia(constraints)
+      this.logEvent(`---> Display media has been set to _displayStream`)
+
+      this._screenShareVideoArea.nativeElement.srcObject = this._displayStream
+      this.logEvent(`---> Added DisplayStream to screenshare video area`)
+
+      this._addTracksToConnection(this._displayStream)
+      
+      this._screenShareContainer.nativeElement.style.display = 'none'
+
+      this.isDashboardHidden = true
+
+    } catch (error) {
+      this._handleGetDisplayMediaError(error)
+    }
+  }
+
+  private _addTracksToConnection(stream: MediaStream): void {
+    // RTCPeerConnection ontrack event fired when addTrack() is called
+    stream.getTracks().forEach((track: MediaStreamTrack) => {
+      this.connection.addTrack(track, this._webcamStream)
+      this.logEvent(`---> Added track: ${track.label}; to connection`)
+    })
   }
 
   private handleDataChannelEvent(event: RTCDataChannelEvent) {
@@ -426,7 +492,6 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this.dataChannel.onopen = this.handleReceiveChannelStatusChange.bind(this)
     this.dataChannel.onclose = this.handleReceiveChannelStatusChange.bind(this)
   }
-
 
   private handleReceiveChannelStatusChange(event: Event) {
     if (this.dataChannel) {
@@ -552,6 +617,22 @@ export class MeetingComponent implements OnInit, OnDestroy {
     }
   }
 
+  private _handleGetDisplayMediaError(error: Error): void {
+    switch (error.name) {
+      case "NotFoundError":
+      case "AbortError":
+      case "InvalidStateError":
+      case "NotAllowedError":
+      case "NotFoundError":
+      case "NotReadableError":
+      case "NotReadableError":
+      case "OverconstrainedError":
+      case "TypeError":
+        this._logError(error)
+        break
+    }
+  }
+
   public logEvent(text: string): void {
     const time = new Date()
     console.log("[" + time.toLocaleTimeString() + "] " + text)
@@ -569,6 +650,8 @@ export class MeetingComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.destroy$.next(false)
     this.destroy$.unsubscribe()
+    this._displayControls$.next(null)
+    this._displayControls$.unsubscribe()
   }
 
 }

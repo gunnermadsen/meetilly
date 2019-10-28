@@ -12,14 +12,7 @@
 </div>
 
 <div class="meeting-container" *ngIf="isStreamingReady">
-    <div class="meeting-title">
-        <h2>{{ meetingData.Name }}</h2>
-        <button mat-mini-fab color="primary" (click)="snav.toggle()">
-            <mat-icon>chat_bubble_outline</mat-icon>
-        </button>
-    </div>
-
-    <mat-divider></mat-divider>
+    <!-- <mat-divider></mat-divider> -->
 
     <mat-sidenav-container class="sidenav-container">
 
@@ -27,6 +20,9 @@
             <div class="message-container">
                 <div class="message-title">
                     <h3>Start a conversation</h3>
+                    <!-- <button mat-icon-button color="primary" class="control-message" (click)="snav.close()">
+                        <mat-icon>close</mat-icon>
+                    </button> -->
                 </div>
                 <div class="message-body">
                     <div class="header">
@@ -63,7 +59,19 @@
         </mat-sidenav>
             
         <mat-sidenav-content>
-            <div class="video-container">
+            <div class="meeting-messenger-toggle" *ngIf="!isDashboardHidden">
+                <button mat-fab color="primary" class="control-message" (click)="snav.toggle()">
+                    <mat-icon>chat_bubble_outline</mat-icon>
+                </button>
+            </div>
+            <div class="meeting-dashboard" *ngIf="!isDashboardHidden">
+                meeting dashboard
+                <button mat-raised-button color="primary" (click)="enterVideoConferenceMode($event)">Videoconference</button>
+                <button mat-raised-button color="primary" (click)="enterScreenSharingMode($event)">Screensharing</button>
+
+            </div>
+
+            <div class="video-container" #videoContainer>
                 <div class="video-wrap">
                     <div class="main-video">
                         <video autoplay #mainVideoArea></video>
@@ -72,6 +80,25 @@
                         <video autoplay muted #smallVideoArea></video>
                     </div>
                 </div>
+                <div class="video-controls" *ngIf="displayControls$ | async">
+                    <button mat-fab color="primary" class="control-message" (click)="snav.toggle()">
+                        <mat-icon>chat_bubble_outline</mat-icon>
+                    </button>
+                    <button mat-fab color="warm" class="control-microphone" (click)="muteMicrophone($event)">
+                        <mat-icon *ngIf="!isMuted">mic</mat-icon>
+                        <mat-icon *ngIf="isMuted">mic_off</mat-icon>
+                    </button>
+                    <button mat-fab color="warm">
+                        <mat-icon>more_horiz</mat-icon>
+                    </button>
+                    <button mat-fab color="warm" class="control-close" (click)="endVideoConference($event)">
+                        <mat-icon>call_end</mat-icon>
+                    </button>
+                </div>
+            </div>
+
+            <div class="screen-share-container" #screenShareContainer>
+                <video class="screen-share-video" #screenShareVideoArea></video>
             </div>
         </mat-sidenav-content>
     </mat-sidenav-container>
