@@ -17,7 +17,7 @@ export const config: SocketIoConfig = {
   options: {
     transports: [ 'websocket' ],
     reconnection: true,
-    timeout: 20000,
+    timeout: 30000,
     reconnectionDelay: 1500,
     
   }

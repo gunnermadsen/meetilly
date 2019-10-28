@@ -12,14 +12,67 @@
 </div>
 
 <div class="meeting-container" *ngIf="isStreamingReady">
-    <div class="video-container">
-        <div class="video-wrap">
-            <div class="main-video">
-                <video autoplay #mainVideoArea></video>
-            </div>
-            <div class="small-video">
-                <video autoplay muted #smallVideoArea></video>
-            </div>
-        </div>
+    <div class="meeting-title">
+        <h2>{{ meetingData.Name }}</h2>
+        <button mat-mini-fab color="primary" (click)="snav.toggle()">
+            <mat-icon>chat_bubble_outline</mat-icon>
+        </button>
     </div>
+
+    <mat-divider></mat-divider>
+
+    <mat-sidenav-container class="sidenav-container">
+
+        <mat-sidenav #snav [mode]="'side'" [position]="'end'" [opened]="true">
+            <div class="message-container">
+                <div class="message-title">
+                    <h3>Start a conversation</h3>
+                </div>
+                <div class="message-body">
+                    <div class="header">
+                        <!-- Display a weekday and time when the conversation was started -->
+                        <!-- <mat-divider *ngIf="messages.length"> {{ messages[0].timestamp | date : 'EEE, h' }} </mat-divider> -->
+                    </div>
+                    <div class="message" 
+                        *ngFor="let message of messages; index as i" 
+                        [ngStyle]="{ 'align-self': alignMessage(message.userType) }"
+                        [style.background-color]="setBackgroundColor(message.userType)">
+
+                        <div [ngSwitch]="message.contentType">
+                            <div *ngSwitchCase="'file'">
+                                <a href="#">{{ message.filename }}</a>
+                            </div>
+                            <div *ngSwitchCase="'message'">
+                                {{ message.body }}
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+                <div class="message-input">
+                    <form class="message-form" [formGroup]="messengerForm">
+                        <mat-form-field appearance="outline">
+                            <textarea placeholder="Send a message" formControlName="Message" matInput cdkTextareaAutosize #autosize="cdkTextareaAutosize" cdkAutosizeMinRows="1" cdkAutosizeMaxRows="10"></textarea>
+                        </mat-form-field>
+                    </form>
+                    <button mat-mini-fab color="primary" (click)="sendMessage($event)"><mat-icon>arrow_upward</mat-icon></button>
+                    <button mat-mini-fab color="accent" (click)="uploader.click()"><mat-icon>cloud_upload</mat-icon></button>
+                    <input type="file" hidden (change)="sendFile($event)" #uploader>
+                </div>
+            </div>
+        </mat-sidenav>
+            
+        <mat-sidenav-content>
+            <div class="video-container">
+                <div class="video-wrap">
+                    <div class="main-video">
+                        <video autoplay #mainVideoArea></video>
+                    </div>
+                    <div class="small-video">
+                        <video autoplay muted #smallVideoArea></video>
+                    </div>
+                </div>
+            </div>
+        </mat-sidenav-content>
+    </mat-sidenav-container>
 </div>

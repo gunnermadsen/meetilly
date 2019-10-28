@@ -63,7 +63,7 @@ export class MainComponent implements OnInit {
     }
 
     this._router.navigate([path], options)
-    // window.open(`/main/meeting/${id.toString()}/open`, "_blank", "width=1500, height=1000")
+    // this._openWindow('host', id.toString())
   }
 
   public joinMeetingAsGuest(): void {
@@ -80,6 +80,11 @@ export class MainComponent implements OnInit {
     }
 
     this._router.navigate([path], options)
+    // this._openWindow('guest', code)
+  }
+
+  private _openWindow(mode: string, code: string): void {
+    window.open(`/meeting/${this._userName}?mode=${mode}&meetingId=${code}`, "_blank", "width=1500, height=1000")
   }
 
 }

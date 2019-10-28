@@ -8,8 +8,8 @@ import { delay } from 'rxjs/operators';
 export class MeetingService {
     private _signal$: Observable<any> = this._socket.fromEvent<any>('signal')
     private _connection$: Observable<any> = this._socket.fromEvent<any>('open')
-
     private _wating$: Observable<any> = this._socket.fromEvent<any>('waiting')
+    private _closed$: Observable<any> = this._socket.fromEvent<any>('closed')
 
     public get signal$(): Observable<any> {
         return this._signal$
@@ -21,6 +21,10 @@ export class MeetingService {
 
     public get waiting$(): Observable<any> {
         return this._wating$.pipe(delay(3000))
+    }
+
+    public get closed$(): Observable<any> {
+        return this._closed$
     }
 
     constructor(private _socket: Socket) { }

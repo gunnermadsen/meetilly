@@ -6,6 +6,10 @@
     justify-content: center;
 }
 
+html, body {
+  height: 100%;
+}
+
 .meeting-progress {
     width: 33.33%;
     display: flex;
@@ -25,12 +29,34 @@
     border-radius: 5px;
 }
 
+.meeting-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.meeting-title {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  margin: 10px 10px 3px 10px;
+}
+
+h2 {
+  margin-bottom: 5px;
+}
+
 // Styles for video section
 // .video-page-holder === .video-container
 
+.video-container {
+  margin: 10px;
+}
+
 .video-container .video-wrap {
-  width: 550px;
-  height: 380px;
+  width: 620px;
+  height: 350px;
   position: relative;
 }
 
@@ -53,7 +79,7 @@
   bottom:0;
   right: 0;
   width: 180px;
-  height: 120px;
+  height: 100px;
   border-left: 1px solid #888;
   border-top: 1px solid #888;
 }
@@ -63,4 +89,88 @@
   left: 0;
   width: 100%;
   height: 100%;  
+}
+
+
+// Sidenav Messenger
+.sidenav-container {
+  height: 100%;
+}
+
+.mat-drawer {
+  width: 400px;
+  height: 100%;
+}
+
+.mat-form-field {
+  width: 100%;
+}
+
+.mat-form-field > .mat-form-field-wrapper {
+  padding-bottom: 0 !important;
+  margin: 0 !important;
+}
+
+.message-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+textarea {
+  resize: none;
+  overflow: scroll;
+}
+
+
+
+.mat-mini-fab {
+  margin-left: 5px;
+}
+
+.message-title {
+  padding: 10px;
+}
+
+.message-body {
+  display: flex;
+  flex-direction: column;
+  height: 90%;
+  width: 100%;
+  padding: 10px;
+  overflow: scroll;
+}
+
+.message {
+  width: 340px;
+  height: auto;
+  padding: 10px 15px;
+  margin: 5px;
+  border-radius: 12px;
+  word-wrap: normal;
+}
+
+.message-input, .message-form {
+  display: flex;
+  flex-direction: row;
+  align-self: flex-end;
+  align-items: center;
+  max-height: 250px;
+  width: 100%;
+  padding: 5px;
+}
+
+
+// .message:nth-child(2n) {
+//   align-self: flex-start;
+//   background-color: rgba(16, 160, 16, 0.92);
+// }
+// .message:nth-child(2n + 1) {
+//   align-self: flex-end;
+//   background-color: rgba(71, 139, 213, 0.988);
+// }
+
+.header {
+  margin-bottom: 5px;
 }

@@ -1,20 +1,22 @@
-import { Component, OnInit, ViewChild, ElementRef, OnDestroy, Renderer2 } from '@angular/core'
-import { Router, ActivatedRouteSnapshot, ActivatedRoute } from '@angular/router'
-import { take, takeUntil } from 'rxjs/operators'
+import { Component, OnInit, ViewChild, ElementRef, OnDestroy, ViewEncapsulation, ChangeDetectorRef } from '@angular/core'
+import { ActivatedRoute } from '@angular/router'
+import { takeUntil, map } from 'rxjs/operators'
 import { MeetingService } from '../../../main/services/meeting.service'
-import { Observable, Subject } from 'rxjs'
+import { Subject, merge } from 'rxjs'
 
-import { config } from '@/app.module'
 import { IPayload } from '../../../main/models/payload.model'
 
 import adapter from 'webrtc-adapter';
+import { FormGroup, FormControl } from '@angular/forms'
 
 @Component({
   selector: 'app-meeting',
   templateUrl: './meeting.component.html',
-  styleUrls: ['./meeting.component.scss']
+  styleUrls: ['./meeting.component.scss'],
+  encapsulation: ViewEncapsulation.None 
 })
 export class MeetingComponent implements OnInit, OnDestroy {
+  private messengerForm: FormGroup
   private _url: string = null
   public connection: RTCPeerConnection
   private dataChannel: RTCDataChannel
@@ -22,18 +24,25 @@ export class MeetingComponent implements OnInit, OnDestroy {
   private _transceiver: (track: MediaStreamTrack) => RTCRtpTransceiver
   private _meetingID: number = null
   private _member: string = null
-  private _meetingData: any = null
+  public meetingData: any = null
   private _type: string = null
   private destroy$: Subject<boolean> = new Subject<boolean>()
-
-  @ViewChild('smallVideoArea', { static: false }) 
-  private _smallVideoArea: ElementRef<HTMLVideoElement>
-
-  @ViewChild('mainVideoArea', { static: false }) 
-  private _mainVideoArea: ElementRef<HTMLVideoElement>
   public isStreamingReady: boolean = false
   public logMode: string = null
-  constructor(private _route: ActivatedRoute, private _meetingService: MeetingService) {
+  // public messages: any[] = Array.from({ length: 10 }).map((_: any, index: number) => {
+  //   return {
+  //     contentType: 'message',
+  //     userType: index % 2 === 0 ? 'guest' : 'host',
+  //     body: "I am trying to develop a Video Calling/Conferencing application using WebRTC and node.js. Right now there is no facility to control bandwidth during during video call. Is there any way to control/reduce bandwidth. (like I want make whole my web application to work on 150 kbps while video conferencing"
+  //   }
+  // })
+  public messages: any[] = []
+
+  @ViewChild('smallVideoArea', { static: false }) private _smallVideoArea: ElementRef<HTMLVideoElement>
+  @ViewChild('mainVideoArea', { static: false }) private _mainVideoArea: ElementRef<HTMLVideoElement>
+
+  constructor(private _route: ActivatedRoute, private _meetingService: MeetingService, private _cdr: ChangeDetectorRef) {
+    this._initializeMessenger()
     this._initializeMeeting()
   }
 
@@ -58,16 +67,17 @@ export class MeetingComponent implements OnInit, OnDestroy {
   private _initializeMeeting(): void {
     this._meetingID = this._route.snapshot.queryParams.meetingId
     this._member = this._route.snapshot.params.userName
-    this._meetingData = this._route.snapshot.data.result[0]
     this._type = this._route.snapshot.queryParams.mode
+
+    this.meetingData = this._route.snapshot.data.result[0]
+    console.log(this.meetingData)
     this.logMode = this._type === 'host' ? 'guest' : 'host'
 
-    this._meetingService.signal$.pipe(takeUntil(this.destroy$)).subscribe((payload: IPayload) => {
-      return this._handleSocketMessageEvent(payload);
-    })
+    merge(this._meetingService.waiting$, this._meetingService.signal$, this._meetingService.closed$).pipe(
+      takeUntil(this.destroy$), 
+      map((payload: IPayload) => payload)
+    ).subscribe((payload: IPayload) => this._handleSocketMessageEvent(payload))
 
-    this._meetingService.waiting$.pipe(takeUntil(this.destroy$)).subscribe((payload: IPayload) => this._handleSocketMessageEvent(payload))
-    // this._initializePeerConnection()
     this._checkForReadiness()
   }
 
@@ -80,6 +90,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this.logEvent(`New RTC Peer Connection initialized for ${this._type}`)
     this.connection = new RTCPeerConnection({
       iceServers: [
+        // Session Traversal Utilities for NAT (STUN) 
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun.services.mozilla.com' },
       ]
@@ -108,6 +119,13 @@ export class MeetingComponent implements OnInit, OnDestroy {
         // we continuously check to see if someone else has joined the room. 
         // the server will continue to emit 'signal' events while there is only one client in the room
         this._checkForReadiness()
+        break
+
+      case "closed":
+        if (this.connection) {
+          this._checkForReadiness()
+          this._initializePeerConnection()
+        }
         break
 
       case "signaling":
@@ -140,6 +158,12 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
   }
 
+  private _initializeMessenger(): void {
+    this.messengerForm = new FormGroup({
+      Message: new FormControl('')
+    })
+  }
+
   public handleICEGatheringStateChangeEvent(event: Event) {
     this.logEvent("*** ICE gathering state changed to: " + this.connection.iceGatheringState)
   }
@@ -153,25 +177,30 @@ export class MeetingComponent implements OnInit, OnDestroy {
     // }
   }
 
-  public handleICEConnectionStateChangeEvent(event: Event) {
-    this.logEvent("*** ICE connection state changed to: " + this.connection.iceConnectionState)
-
-    switch (this.connection.iceConnectionState) {
-      case "closed":
-        this._closeVideoCall()
-        break
-      case "failed":
-      case "disconnected":
-        this._closeVideoCall()
-        this._initializeMeeting()
-        this._initializeMeetingOpenListener()
-        break
-    }
-  }
-
   public handleTrackEvent(event: RTCTrackEvent) {
     this.logEvent("*** Track event triggering state change on main video area srcObject")
     this._mainVideoArea.nativeElement.srcObject = event.streams[0]
+  }
+
+  public handleICEConnectionStateChangeEvent(event: Event) {
+
+    const state = this.connection.iceConnectionState
+    this.logEvent(`*** ICE connection state changed to: ${state}`)
+
+    switch (state) {
+      case "closed":
+        this._closeVideoCall(state)
+        break
+      case "failed":
+      case "disconnected":
+        this.logEvent(`---> Peer connection has '${state}'. Attempting to reconnect to ${this._type}`)
+        this._closeVideoCall(state)
+        // this.connection.createOffer({ iceRestart: true })
+        this._checkForReadiness()
+        // this._initializeMeeting()
+        // this._initializeMeetingOpenListener()
+        break
+    }
   }
 
   public handleICECandidateEvent(event: RTCPeerConnectionIceEvent) {
@@ -191,22 +220,18 @@ export class MeetingComponent implements OnInit, OnDestroy {
   public async handleNegotiationNeededEvent(event: Event) {
     this.logEvent("*** Negotiation needed")
 
-    try {
-      this.logEvent("---> Creating offer")
+    try {      
       const offer = await this.connection.createOffer()
-
-      // If the connection hasn't yet achieved the "stable" state,
-      // return to the caller. Another negotiationneeded event
-      // will be fired when the state stabilizes.
-
+      this.logEvent("---> Offer Created")
+      
       if (this.connection.signalingState !== "stable") {
-        this.logEvent("     -- The connection isn't stable yet postponing...")
+        this.logEvent("--->* Signaling state is unstable. Will negotiate new offer when stable.")
         return
       }
 
       // Establish the offer as the local peer's current description.
-      this.logEvent("---> Setting local description to the offer")
       await this.connection.setLocalDescription(offer)
+      this.logEvent("---> Set local description to the offer")
 
       // Send the offer to the remote peer.
       this.logEvent(`---> Sending the offer to the ${this.logMode}, using localDescription: ${this.connection.localDescription}`)
@@ -225,24 +250,35 @@ export class MeetingComponent implements OnInit, OnDestroy {
     }
   }
 
-  public logEvent(text: string): void {
-    const time = new Date()
-    console.log("[" + time.toLocaleTimeString() + "] " + text)
-  }
+  private async _handleNewICECandidateMessage(payload: IPayload) {
 
-  private _logError(text: any): void {
-    const time = new Date()
+    const candidate: RTCIceCandidate = new RTCIceCandidate(payload.data)
 
-    // tslint:disable-next-line: no-console
-    console.error("[" + time.toLocaleTimeString() + "] " + text)
+    this.logEvent("*** Adding received ICE candidate: " + JSON.stringify(candidate))
+
+    try {
+
+      if (candidate) {
+        
+        await this.connection.addIceCandidate(candidate)
+        this.logEvent("---> Ice Candiate Added")
+
+      } else {
+        return
+      }
+
+    } catch (error) {
+
+      this._reportError(error)
+
+    }
   }
 
   private async _handleVideoOfferMessage(message: IPayload) {
 
     // const getUserMedia = navigator.mediaDevices.getUserMedia || navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
-
     
-    this.logEvent(`Received video chat offer from ${this.logMode}`)
+    this.logEvent(`*** Received video chat offer from ${this.logMode}`)
   
     if (!this.connection) {
       this._initializePeerConnection()
@@ -253,7 +289,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
     try {
       if (this.connection.signalingState !== "stable" && description.type === 'offer') {
 
-        this.logEvent("  - But the signaling state isn't stable, so triggering rollback")
+        this.logEvent("---> But the signaling state isn't stable, so triggering rollback")
 
         await Promise.all([
           this.connection.setLocalDescription({ type: "rollback" }),
@@ -262,7 +298,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
         return
 
       } else {
-        this.logEvent("  - Setting remote description")
+        this.logEvent("---> Setting remote description")
         await this.connection.setRemoteDescription(description)
       }
 
@@ -273,30 +309,44 @@ export class MeetingComponent implements OnInit, OnDestroy {
     if (!this._webcamStream) {
 
       try {
-        // Add the camera stream to the RTCPeerConnection
-        this._webcamStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true })
+
+        const constraints: MediaStreamConstraints = {
+          audio: true,
+          video: {
+            width: { min: 1280, ideal: 1280, max: 1920 },
+            height: { min: 720, ideal: 720, max: 1080 }
+          }
+        }
+
+        this._webcamStream = await navigator.mediaDevices.getUserMedia(constraints)
         this.logEvent(`---> Acquired user media for ${this.logMode}`)
 
-        // set the stream to the video elements srcObject property
         this._smallVideoArea.nativeElement.srcObject = this._webcamStream
         this.logEvent(`---> Added webcam stream to small video area element on ${this.logMode}`)
 
         this._webcamStream.getTracks().forEach((track: MediaStreamTrack) => {
-          this.logEvent(`---> Adding track to RTC Peer Connection ${track.label}`)
           this.connection.addTrack(track, this._webcamStream)
+          this.logEvent(`---> Added track: ${track.label}; to connection`)
         })
 
-      } catch (err) {
-        this._handleGetUserMediaError(err)
+        // this._webcamStream.getTracks().forEach(this._transceiver = track => this.connection.addTransceiver(track, { streams: [this._webcamStream] }));
+
+      } catch (error) {
+        this._handleGetUserMediaError(error)
         return
       }
 
       try {
-        this.logEvent("---> Creating and Sending Answer to Caller")
-        const answer: RTCSessionDescriptionInit = await this.connection.createAnswer()
 
-        this.logEvent("---> Setting Answer to Local Description")
-        await this.connection.setLocalDescription(answer)
+        if (this.connection.signalingState === "have-remote-offer" || this.connection.signalingState === "have-local-pranswer") {
+          this.logEvent("---> Creating and Sending Answer to Caller")
+          const answer: RTCSessionDescriptionInit = await this.connection.createAnswer()
+  
+          this.logEvent("---> Setting Answer to Local Description")
+          await this.connection.setLocalDescription(answer)
+        } else {
+          return
+        }
 
       } catch (error) {
         this._logError(error)
@@ -328,6 +378,163 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
   }
 
+  private _closeVideoCall(state: string) {
+
+    this.logEvent("Closing the call")
+
+    if (this.connection) {
+      this.logEvent("--> Closing the peer connection events")
+
+      this.connection.ontrack = null
+      this.connection.onicecandidate = null
+      this.connection.oniceconnectionstatechange = null
+      this.connection.onsignalingstatechange = null
+      this.connection.onicegatheringstatechange = null
+      this.connection.onnegotiationneeded = null
+
+      this.dataChannel.onmessage = null
+      this.dataChannel.onopen = null
+
+      // this.connection.getTransceivers().forEach((track: RTCRtpTransceiver) => track.stop())
+
+      if (this._smallVideoArea.nativeElement.srcObject) {
+        this._smallVideoArea.nativeElement.pause()
+        this._webcamStream.getTracks().forEach((stream: MediaStreamTrack) => stream.stop())
+      }
+
+      this.logEvent("--> Closing the peer connection")
+      this.logEvent("--> Closing the data channel")
+
+      this.connection.close()
+      this.dataChannel.close()
+      this.connection = null
+      this.dataChannel = null
+      this._webcamStream = null
+    }
+
+    // Disable the hangup button
+
+    // document.getElementById("hangup-button").disabled = true
+    // targetUsername = null
+  }
+
+  private handleDataChannelEvent(event: RTCDataChannelEvent) {
+    this.logEvent(`---> Data Channel Initiated on ${this.logMode}`)
+    this.dataChannel = event.channel
+    this.dataChannel.onmessage = this.handleDataChannelMessage.bind(this)
+
+    this.dataChannel.onopen = this.handleReceiveChannelStatusChange.bind(this)
+    this.dataChannel.onclose = this.handleReceiveChannelStatusChange.bind(this)
+  }
+
+
+  private handleReceiveChannelStatusChange(event: Event) {
+    if (this.dataChannel) {
+      this.logEvent("Data channel's status has changed to " + this.dataChannel.readyState)
+    }
+  }
+
+  private handleDataChannelMessage(event: MessageEvent) {
+    this.logEvent(`*** DataChannel Message Received: ${event.data}`)
+    const message = JSON.parse(event.data)
+
+    this.messages.push(message)
+    this._cdr.detectChanges()
+  }
+
+  private handleDataChannelOnOpenEvent() {
+    if (this.dataChannel.readyState === 'open') {
+      this.logEvent("Data Channel open")
+      this.dataChannel.onmessage = this.handleDataChannelMessage.bind(this)
+    }
+  }
+
+  public alignMessage(type: string): string {
+    return type === this.logMode ? 'flex-start' : 'flex-end'
+  }
+
+  public setBackgroundColor(type: string): string {
+    return type === this.logMode ? 'rgba(16, 160, 16, 0.92)' : 'rgba(71, 139, 213, 0.988)' // greeen : blue (respectively)
+  }
+
+  public sendMessage(event: MouseEvent): void {
+
+    const content = {
+      sender: this._member,
+      body: this.messengerForm.controls['Message'].value,
+      contentType: 'message',
+      userType: this._type,
+      timestamp: new Date()
+    }
+
+    this.messages.push(content)
+    this.messengerForm.controls['Message'].setValue("")
+
+    this.dataChannel.send(JSON.stringify(content))
+    this.logEvent(`*** DataChannel message sent: ${JSON.stringify(content)}`)
+  }
+
+  public sendFile(changeEvent: any): void {
+
+    if (!changeEvent.target.files) {
+      return
+    }
+
+    const file: File = changeEvent.target.files[0]
+    const chunk = 16384
+
+    const message = {
+      sender: this._member,
+      body: "Download file",
+      filename: file.name,
+      filesize: file.size,
+      contentType: 'file',
+      userType: this._type,
+      timestamp: new Date()
+    }
+
+    this.messages.push(message)
+    
+    const payload = JSON.stringify(message) 
+
+    this.dataChannel.send(payload)
+
+    return 
+
+    this._meetingService.signal('files', {
+      meetingId: this._meetingID,
+      member: this._member,
+      filename: file.name,
+      filesize: file.size,
+      isUpload: true,
+      data: payload,
+      userType: this._type
+    })
+    
+    const sliceFile = (offset: any) => {
+
+      const reader = new FileReader()
+
+      reader.onload = () => {
+        return (event: any) => {
+
+          this.dataChannel.send(event.target.result)
+
+          if (file.size > (offset + event.target.result.byteLength)) {
+            setTimeout(sliceFile, 0, (offset + chunk))
+          }
+
+          // set file upload progress here
+        }
+      }
+
+      const slice = file.slice(offset, (offset + chunk))
+      reader.readAsArrayBuffer(slice)
+    }
+    sliceFile(0)
+    // this.fileTransfer = false
+  }
+
   private _handleGetUserMediaError(error: Error) {
     this._logError(error)
     switch (error.name) {
@@ -345,90 +552,18 @@ export class MeetingComponent implements OnInit, OnDestroy {
     }
   }
 
-  private async _handleNewICECandidateMessage(payload: IPayload) {
+  public logEvent(text: string): void {
+    const time = new Date()
+    console.log("[" + time.toLocaleTimeString() + "] " + text)
+  }
 
-    const candidate: RTCIceCandidate = new RTCIceCandidate(payload.data)
-
-    this.logEvent("*** Adding received ICE candidate: " + JSON.stringify(candidate))
-
-    try {
-
-      await this.connection.addIceCandidate(candidate)
-
-    } catch (error) {
-
-      this._reportError(error)
-
-    }
+  private _logError(text: any): void {
+    const time = new Date()
+    console.error("[" + time.toLocaleTimeString() + "] " + text)
   }
 
   private _reportError(message: Error) {
     this._logError(`Error ${message.name}: ${message.message}`)
-  }
-
-  private _closeVideoCall() {
-
-    this.logEvent("Closing the call")
-
-    if (this.connection) {
-      this.logEvent("--> Closing the peer connection")
-
-      this.connection.ontrack = null
-      this.connection.onicecandidate = null
-      this.connection.oniceconnectionstatechange = null
-      this.connection.onsignalingstatechange = null
-      this.connection.onicegatheringstatechange = null
-      this.connection.onnegotiationneeded = null
-
-      this.dataChannel.onmessage = null
-      this.dataChannel.onopen = null
-
-      this.connection.getTransceivers().forEach((transceiver: RTCRtpTransceiver) => transceiver.stop())
-
-      if (this._smallVideoArea.nativeElement.srcObject) {
-        this._smallVideoArea.nativeElement.pause()
-        this._webcamStream.getTracks().forEach((track: MediaStreamTrack) => track.stop())
-      }
-
-      this.connection.close()
-      this.dataChannel.close()
-      this.connection = null
-      this.dataChannel = null
-      this._webcamStream = null
-    }
-
-    // Disable the hangup button
-
-    // document.getElementById("hangup-button").disabled = true
-    // targetUsername = null
-  }
-
-  private handleDataChannelEvent(event) {
-    this.logEvent("Receiving a data channel")
-    this.dataChannel = event.channel
-    this.dataChannel.onmessage = this.receiveDataChannelMessage
-
-    this.dataChannel.onopen = this.handleReceiveChannelStatusChange
-    this.dataChannel.onclose = this.handleReceiveChannelStatusChange
-  }
-
-
-  private handleReceiveChannelStatusChange(event) {
-    if (this.dataChannel) {
-      this.logEvent("Data channel's status has changed to " + this.dataChannel.readyState)
-    }
-  }
-
-  private receiveDataChannelMessage(event) {
-    this.logEvent("From DataChannel: " + event.data)
-    // appendChatMessage(event.data, 'message-out')
-  }
-
-  private handleDataChannelOnOpenEvent() {
-    if (this.dataChannel.readyState === 'open') {
-      this.logEvent("Data Channel open")
-      this.dataChannel.onmessage = this.receiveDataChannelMessage
-    }
   }
 
   ngOnDestroy() {
