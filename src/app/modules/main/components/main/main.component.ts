@@ -53,38 +53,35 @@ export class MainComponent implements OnInit {
   }
 
   public startMeetingAsHost(event: MouseEvent, id: number): void {
-    const path = `/meeting/${this._userName}`
 
     const options = {
       queryParams: {
         mode: 'host',
-        meetingId: id.toString()
+        meetingId: id.toString(),
+        member: this._userName
       }
     }
 
-    this._router.navigate([path], options)
+    this._router.navigate(['/meeting'], options)
     // this._openWindow('host', id.toString())
   }
 
   public joinMeetingAsGuest(): void {
 
-    const code = this.form.controls['MeetingNumber'].value
-
-    const path = `/meeting/${this._userName}`
-
     const options = { 
       queryParams: {
         mode: 'guest',
-        meetingId: code
+        meetingId: this.form.controls['MeetingNumber'].value,
+        member: this._userName
       }
     }
 
-    this._router.navigate([path], options)
+    this._router.navigate(['/meeting'], options)
     // this._openWindow('guest', code)
   }
 
   private _openWindow(mode: string, code: string): void {
-    window.open(`/meeting/${this._userName}?mode=${mode}&meetingId=${code}`, "_blank", "width=1500, height=1000")
+    window.open(`/meeting?mode=${mode}&meetingId=${code}&member=${this._userName}`, "_blank", "width=1500, height=1000")
   }
 
 }

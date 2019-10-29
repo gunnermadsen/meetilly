@@ -1,19 +1,23 @@
 import { Component, OnInit, ViewChild, ElementRef, OnDestroy, ViewEncapsulation, ChangeDetectorRef } from '@angular/core'
 import { ActivatedRoute } from '@angular/router'
-import { takeUntil, map, startWith, delay, endWith, tap } from 'rxjs/operators'
-import { MeetingService } from '../../../main/services/meeting.service'
-import { Subject, merge, Observable, fromEvent, BehaviorSubject } from 'rxjs'
-
-import { IPayload } from '../../../main/models/payload.model'
-
-import adapter from 'webrtc-adapter';
 import { FormGroup, FormControl } from '@angular/forms'
+
+import { takeUntil, map, tap, debounceTime, mergeAll } from 'rxjs/operators'
+import { Subject, merge, Observable, fromEvent, BehaviorSubject, combineLatest } from 'rxjs'
+
+import adapter from 'webrtc-adapter'
+import { ToastrService } from 'ngx-toastr'
+
+import { MeetingService } from '@/modules/main/services/meeting.service'
+import { IPayload } from '@/modules/main/models/payload.model'
+import { transition, trigger, state, style, animate } from '@angular/animations'
+
 
 @Component({
   selector: 'app-meeting',
   templateUrl: './meeting.component.html',
   styleUrls: ['./meeting.component.scss'],
-  encapsulation: ViewEncapsulation.None 
+  // encapsulation: ViewEncapsulation.None
 })
 export class MeetingComponent implements OnInit, OnDestroy {
   @ViewChild('smallVideoArea', { static: false }) private _smallVideoArea: ElementRef<HTMLVideoElement>
@@ -22,36 +26,39 @@ export class MeetingComponent implements OnInit, OnDestroy {
   @ViewChild('videoContainer', { static: false }) private _videoContainer: ElementRef<HTMLElement>
   @ViewChild('screenShareContainer', { static: false }) private _screenShareContainer: ElementRef<HTMLElement>
   private messengerForm: FormGroup
-  private _url: string = null
   public connection: RTCPeerConnection
   private dataChannel: RTCDataChannel
   private _webcamStream: MediaStream = null
   private _displayStream: MediaStream = null
   private _transceiver: (track: MediaStreamTrack) => RTCRtpTransceiver
   private _meetingID: number = null
-  private _member: string = null
+  public member: string = null
   public meetingData: any = null
   private _type: string = null
   private destroy$: Subject<boolean> = new Subject<boolean>()
+  private closeConference$: Subject<boolean> = new Subject<boolean>()
   private _displayControls$: BehaviorSubject<boolean> = new BehaviorSubject<boolean>(true)
   public displayControls$: Observable<boolean> = this._displayControls$.asObservable()
   public isStreamingReady: boolean = false
   public isVideoConfereneMode: boolean = false
-  public logMode: string = null
-  // public messages: any[] = Array.from({ length: 10 }).map((_: any, index: number) => {
-  //   return {
-  //     contentType: 'message',
-  //     userType: index % 2 === 0 ? 'guest' : 'host',
-  //     body: "I am trying to develop a Video Calling/Conferencing application using WebRTC and node.js. Right now there is no facility to control bandwidth during during video call. Is there any way to control/reduce bandwidth. (like I want make whole my web application to work on 150 kbps while video conferencing"
-  //   }
-  // })
+  public oppositeUserType: string = null
   public messages: any[] = []
+  public users: IPayload[] = []
   public isMuted: boolean = false
   public isDashboardHidden: boolean = false
+  public isPaused: boolean = false
 
-  constructor(private _route: ActivatedRoute, private _meetingService: MeetingService, private _cdr: ChangeDetectorRef) {
-    this._initializeMessenger()
-    this._initializeMeeting()
+  constructor(private _route: ActivatedRoute, private _meetingService: MeetingService, private _cdr: ChangeDetectorRef, private _toastrService: ToastrService) {
+    this._meetingID = this._route.snapshot.queryParams.meetingId
+    this.member = this._route.snapshot.queryParams.member
+    this._type = this._route.snapshot.queryParams.mode
+
+    this.meetingData = this._route.snapshot.data.result[0]
+    this.oppositeUserType = this._type === 'host' ? 'guest' : 'host'
+    
+    this.messengerForm = this._initializeMessengerForm()
+    this._initializeMeetingSignaling()
+    // this._initializeMetadataExchangeStrategy()
   }
 
   ngOnInit() {
@@ -62,35 +69,41 @@ export class MeetingComponent implements OnInit, OnDestroy {
     // wait until the open event is triggered (when 1 or more users are in a room)
     this._meetingService.connection$.pipe(takeUntil(this.destroy$)).subscribe((event: any) => {
       this.logEvent(`Initial Signal Emitted by ${this._type}`)
+      this._addMember(event)
       this._meetingService.signal('signal', {
         meetingId: this._meetingID,
-        member: this._member,
+        member: this.member,
         mode: 'signaling',
         data: null,
         userType: this._type
       })
     })
   }
-
-  private _initializeMeeting(): void {
-    this._meetingID = this._route.snapshot.queryParams.meetingId
-    this._member = this._route.snapshot.params.userName
-    this._type = this._route.snapshot.queryParams.mode
-
-    this.meetingData = this._route.snapshot.data.result[0]
-    console.log(this.meetingData)
-    this.logMode = this._type === 'host' ? 'guest' : 'host'
-
-    merge(this._meetingService.waiting$, this._meetingService.signal$, this._meetingService.closed$).pipe(
-      takeUntil(this.destroy$), 
-      map((payload: IPayload) => payload)
-    ).subscribe((payload: IPayload) => this._handleSocketMessageEvent(payload))
+  
+  private _initializeMeetingSignaling(): void {
+  
+    merge(
+      this._meetingService.waiting$, 
+      this._meetingService.signal$, 
+      this._meetingService.closed$, 
+      this._meetingService.exchange$
+    )
+    .pipe(
+      map((payload: any) => {
+        if (payload.mode === "exchange") {
+          this._addMember(payload)
+        }
+        return payload;
+      }),
+      takeUntil(this.destroy$)
+    )
+    .subscribe((payload: any) => this._handleSocketMessageEvent(payload))
 
     this._checkForReadiness()
   }
 
   private _checkForReadiness() {
-    this._meetingService.signal('initialize', { meetingId: this._meetingID, mode: "waiting" })
+    this._meetingService.signal('waiting', { meetingId: this._meetingID, mode: "waiting", userType: this._type, member: this.member })
   }
 
   private _initializePeerConnection() {
@@ -98,7 +111,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this.logEvent(`New RTC Peer Connection initialized for ${this._type}`)
     this.connection = new RTCPeerConnection({
       iceServers: [
-        // Session Traversal Utilities for NAT (STUN) 
+        // Session Traversal Utilities for NAT (STUN)
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun.services.mozilla.com' },
       ]
@@ -106,34 +119,30 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
     this.dataChannel = this.connection.createDataChannel('meetingChannel', { ordered: false })
 
-    this.dataChannel.onopen = this.handleDataChannelOnOpenEvent.bind(this)
-    this.connection.ondatachannel = this.handleDataChannelEvent.bind(this)
-
-    this.connection.onicecandidate = this.handleICECandidateEvent.bind(this)
-    this.connection.oniceconnectionstatechange = this.handleICEConnectionStateChangeEvent.bind(this)
-    this.connection.onicegatheringstatechange = this.handleICEGatheringStateChangeEvent.bind(this)
-    this.connection.onsignalingstatechange = this.handleSignalingStateChangeEvent.bind(this)
-    this.connection.onnegotiationneeded = this.handleNegotiationNeededEvent.bind(this)
-    this.connection.ontrack = this.handleTrackEvent.bind(this)
+    this.dataChannel.onopen                       = this._handleDataChannelOnOpenEvent          .bind(this)
+    this.connection.ondatachannel                 = this._handleDataChannelEvent                .bind(this)
+    this.connection.onicecandidate                = this._handleICECandidateEvent               .bind(this)
+    this.connection.oniceconnectionstatechange    = this._handleICEConnectionStateChangeEvent   .bind(this)
+    this.connection.onicegatheringstatechange     = this._handleICEGatheringStateChangeEvent    .bind(this)
+    this.connection.onsignalingstatechange        = this._handleSignalingStateChangeEvent       .bind(this)
+    this.connection.onnegotiationneeded           = this._handleNegotiationNeededEvent          .bind(this)
+    this.connection.ontrack                       = this._handleTrackEvent                      .bind(this)
 
     // reveal the meeting room
     this.isStreamingReady = true
 
-    // fromEvent(document, 'mousemove').pipe(
-    //   tap(() => this._displayControls$.next(true)),
-    //   delay(5000),
-    //   tap(() => this._displayControls$.next(false)),
-    //   takeUntil(this.destroy$)
-    // ).subscribe()
+    this._meetingService.signal('exchange', { meetingId: this._meetingID, member: this.member, userType: this._type, mode: 'exchange' })
   }
 
-  private _handleSocketMessageEvent(event?: IPayload) {
+  private _handleSocketMessageEvent(event: IPayload): void {
 
     switch (event.mode) {
       case "waiting":
-        // we continuously check to see if someone else has joined the room. 
-        // the server will continue to emit 'signal' events while there is only one client in the room
         this._checkForReadiness()
+        break
+
+      case "exchange":
+        this._addMember(event)
         break
 
       case "closed":
@@ -145,7 +154,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
       case "signaling":
         if (!this.connection) {
-          this._initializePeerConnection()
+          this._initializePeerConnection()          
         }
         break
 
@@ -161,11 +170,10 @@ export class MeetingComponent implements OnInit, OnDestroy {
         this._handleNewICECandidateMessage(event)
         break
 
-      // case "hang-up": // The other peer has hung up the call
-      //   this._handleHangUpMsg(message)
-      //   break
+      case "hangup": 
+        this._hangupAndNotify(event)
+        break
 
-      // Unknown message output to console for debugging.
       default:
         this._logError("Unknown message received:")
         this._logError(event)
@@ -173,18 +181,18 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
   }
 
-  private _initializeMessenger(): void {
-    this.messengerForm = new FormGroup({
+  private _initializeMessengerForm(): FormGroup {
+    return new FormGroup({
       Message: new FormControl('')
     })
   }
 
-  public handleICEGatheringStateChangeEvent(event: Event) {
-    this.logEvent("*** ICE gathering state changed to: " + this.connection.iceGatheringState)
+  private _handleICEGatheringStateChangeEvent(event: Event) {
+    this.logEvent(`*** ICE gathering state changed to: ${this.connection.iceGatheringState}`)
   }
 
-  public handleSignalingStateChangeEvent(event: Event) {
-    this.logEvent("*** WebRTC signaling state changed to: " + this.connection.signalingState)
+  private _handleSignalingStateChangeEvent(event: Event) {
+    this.logEvent(`*** WebRTC signaling state changed to: ${this.connection.signalingState}`)
     // switch (this.connection.signalingState) {
     //   case "closed":
     //     this._closeVideoCall()
@@ -192,12 +200,12 @@ export class MeetingComponent implements OnInit, OnDestroy {
     // }
   }
 
-  public handleTrackEvent(event: RTCTrackEvent) {
-    this.logEvent("*** Track event triggering state change on main video area srcObject")
+  private _handleTrackEvent(event: RTCTrackEvent) {
+    this.logEvent(`*** Track event triggering state change on main video area srcObject`)
     this._mainVideoArea.nativeElement.srcObject = event.streams[0]
   }
 
-  public handleICEConnectionStateChangeEvent(event: Event) {
+  private _handleICEConnectionStateChangeEvent(event: Event) {
 
     const state = this.connection.iceConnectionState
     this.logEvent(`*** ICE connection state changed to: ${state}`)
@@ -220,21 +228,21 @@ export class MeetingComponent implements OnInit, OnDestroy {
     }
   }
 
-  public handleICECandidateEvent(event: RTCPeerConnectionIceEvent) {
+  private _handleICECandidateEvent(event: RTCPeerConnectionIceEvent) {
     if (event.candidate) {
-      this.logEvent("*** Outgoing ICE candidate: " + event.candidate.candidate)
+      this.logEvent(`*** Outgoing ICE candidate: ${event.candidate.candidate}`)
 
       this._meetingService.signal('signal', {
         meetingId: this._meetingID,
-        member: this._member,
+        member: this.member,
         mode: "icecandidate",
-        data: event.candidate, //JSON.stringify({ candidate: event.candidate }),
+        data: event.candidate,
         userType: this._type
       })
     }
   }
 
-  public async handleNegotiationNeededEvent(event: Event) {
+  private async _handleNegotiationNeededEvent(event: Event) {
     this.logEvent("*** Negotiation needed")
 
     try {      
@@ -251,11 +259,11 @@ export class MeetingComponent implements OnInit, OnDestroy {
       this.logEvent("---> Set local description to the offer")
 
       // Send the offer to the remote peer.
-      this.logEvent(`---> Sending the offer to the ${this.logMode}, using localDescription: ${this.connection.localDescription}`)
+      this.logEvent(`---> Sending the offer to the ${this.oppositeUserType}, using localDescription: ${this.connection.localDescription}`)
       
       this._meetingService.signal('signal', {
         meetingId: this._meetingID,
-        member: this._member,
+        member: this.member,
         mode: "offer",
         data: this.connection.localDescription,
         userType: this._type
@@ -293,9 +301,9 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
   private async _handleVideoOfferMessage(message: IPayload) {
 
-    // const getUserMedia = navigator.mediaDevices.getUserMedia || navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+    // const getUserMedia = navigator.mediaDevices.getUserMedia || navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia
     
-    this.logEvent(`*** Received video chat offer from ${this.logMode}`)
+    this.logEvent(`*** Received video chat offer from ${this.oppositeUserType}`)
   
     if (!this.connection) {
       this._initializePeerConnection()
@@ -343,7 +351,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
       this._meetingService.signal('signal', {
         meetingId: this._meetingID,
-        member: this._member,
+        member: this.member,
         mode: "answer",
         data: this.connection.localDescription,
         userType: this._type
@@ -374,14 +382,9 @@ export class MeetingComponent implements OnInit, OnDestroy {
     if (this.connection) {
       this.logEvent("--> Closing the MediaStream Tracks")
 
-      if (this._smallVideoArea.nativeElement.srcObject) {
-        this._smallVideoArea.nativeElement.pause()
-        this._webcamStream.getTracks().forEach((stream: MediaStreamTrack) => stream.stop())
-      }
+      this._resetMeetingRoom()
 
-      this._videoContainer.nativeElement.style.display = 'none'
-
-      this.isVideoConfereneMode = !this.isVideoConfereneMode
+      this._meetingService.signal('signal', { meetingId: this._meetingID, mode: 'hangup', member: this.member })
 
     }
   }
@@ -400,12 +403,66 @@ export class MeetingComponent implements OnInit, OnDestroy {
       this.dataChannel = null
       this._webcamStream = null
       this._displayStream = null
+      
+      this.closeConference$.next(null)
+      this.closeConference$.unsubscribe()
     }
+  }
+
+  private _resetMeetingRoom(): void {
+    if (this._smallVideoArea.nativeElement.srcObject) {
+      this._smallVideoArea.nativeElement.pause()
+      this._webcamStream.getTracks().forEach((stream: MediaStreamTrack) => stream.stop())
+    }
+
+    this._videoContainer.nativeElement.style.display = 'none'
+
+    this.isVideoConfereneMode = !this.isVideoConfereneMode
+
+    this.isDashboardHidden = false
+  }
+
+  private _addMember(payload: IPayload): void {
+    if (!this.users.length) {
+      this.users.push(payload)
+      this.logEvent(`Member added as: ${payload.userType}`)
+      return
+    }
+
+    this.users.forEach((user: IPayload, index: number) => {
+      if (user.member === payload.member && user.userType === payload.userType) {
+        return 
+      }
+      if (index === this.users.length - 1) {
+        this.users.push(payload)
+        this.logEvent(`*** Member: ${payload.member}: (${payload.userType}) has been added`)
+      }
+    })
+  }
+
+  private _hangupAndNotify(payload: IPayload): void {
+    // assuming this method will be executed on the receiving end
+    this._resetMeetingRoom()
+    this._toastrService.info(`${payload.member} has left the meeting`)
   }
 
   public muteMicrophone(event: MouseEvent): void {
     this.isMuted = !this.isMuted
     this._webcamStream.getAudioTracks()[0].enabled = !this._webcamStream.getAudioTracks()[0].enabled
+  }
+
+  public disableVideoCamera(event: MouseEvent): void {
+    this.isPaused = !this.isPaused
+    this._webcamStream.getVideoTracks().map((stream: MediaStreamTrack) => stream.enabled = !stream.enabled)
+  }
+
+  private _watchForMouseMovement(): void {
+    fromEvent(document, 'mousemove').pipe(
+      tap(() => this._displayControls$.next(true)),
+      debounceTime(2000),
+      tap(() => this._displayControls$.next(false)),
+      takeUntil(this.closeConference$)
+    ).subscribe()
   }
 
   public async enterVideoConferenceMode(event: MouseEvent): Promise<void> {
@@ -430,12 +487,14 @@ export class MeetingComponent implements OnInit, OnDestroy {
       }
 
       this._webcamStream = await navigator.mediaDevices.getUserMedia(constraints)
-      this.logEvent(`---> Acquired user media for ${this.logMode}`)
+      this.logEvent(`---> Acquired user media for ${this.oppositeUserType}`)
 
       this._smallVideoArea.nativeElement.srcObject = this._webcamStream
-      this.logEvent(`---> Added webcam stream to small video area element on ${this.logMode}`)
+      this.logEvent(`---> Added webcam stream to small video area element on ${this.oppositeUserType}`)
 
       this._addTracksToConnection(this._webcamStream)
+
+      this._watchForMouseMovement()
 
     } catch (error) {
       this._handleGetUserMediaError(error)
@@ -480,12 +539,12 @@ export class MeetingComponent implements OnInit, OnDestroy {
     // RTCPeerConnection ontrack event fired when addTrack() is called
     stream.getTracks().forEach((track: MediaStreamTrack) => {
       this.connection.addTrack(track, this._webcamStream)
-      this.logEvent(`---> Added track: ${track.label}; to connection`)
+      this.logEvent(`---> Added track: ${track.label} to connection`)
     })
   }
 
-  private handleDataChannelEvent(event: RTCDataChannelEvent) {
-    this.logEvent(`---> Data Channel Initiated on ${this.logMode}`)
+  private _handleDataChannelEvent(event: RTCDataChannelEvent) {
+    this.logEvent(`---> Data Channel Initiated on ${this.oppositeUserType}`)
     this.dataChannel = event.channel
     this.dataChannel.onmessage = this.handleDataChannelMessage.bind(this)
 
@@ -507,7 +566,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this._cdr.detectChanges()
   }
 
-  private handleDataChannelOnOpenEvent() {
+  private _handleDataChannelOnOpenEvent() {
     if (this.dataChannel.readyState === 'open') {
       this.logEvent("Data Channel open")
       this.dataChannel.onmessage = this.handleDataChannelMessage.bind(this)
@@ -515,17 +574,17 @@ export class MeetingComponent implements OnInit, OnDestroy {
   }
 
   public alignMessage(type: string): string {
-    return type === this.logMode ? 'flex-start' : 'flex-end'
+    return type === this.oppositeUserType ? 'flex-start' : 'flex-end'
   }
 
   public setBackgroundColor(type: string): string {
-    return type === this.logMode ? 'rgba(16, 160, 16, 0.92)' : 'rgba(71, 139, 213, 0.988)' // greeen : blue (respectively)
+    return type === this.oppositeUserType ? 'rgba(16, 160, 16, 0.92)' : 'rgba(71, 139, 213, 0.988)' // greeen : blue (respectively)
   }
 
   public sendMessage(event: MouseEvent): void {
 
     const content = {
-      sender: this._member,
+      sender: this.member,
       body: this.messengerForm.controls['Message'].value,
       contentType: 'message',
       userType: this._type,
@@ -549,7 +608,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
     const chunk = 16384
 
     const message = {
-      sender: this._member,
+      sender: this.member,
       body: "Download file",
       filename: file.name,
       filesize: file.size,
@@ -568,7 +627,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
     this._meetingService.signal('files', {
       meetingId: this._meetingID,
-      member: this._member,
+      member: this.member,
       filename: file.name,
       filesize: file.size,
       isUpload: true,

@@ -20,6 +20,12 @@
             <div class="message-container">
                 <div class="message-title">
                     <h3>Start a conversation</h3>
+                    <mat-form-field appearance="outline">
+                        <mat-label>Members</mat-label>
+                        <mat-select>
+                            <mat-option *ngFor="let user of users; index as i" [value]="i" [disabled]="user.member === member">{{ user.member }} ({{ user.userType }})</mat-option>
+                        </mat-select>
+                    </mat-form-field>
                     <!-- <button mat-icon-button color="primary" class="control-message" (click)="snav.close()">
                         <mat-icon>close</mat-icon>
                     </button> -->
@@ -48,7 +54,8 @@
                 <div class="message-input">
                     <form class="message-form" [formGroup]="messengerForm">
                         <mat-form-field appearance="outline">
-                            <textarea placeholder="Send a message" formControlName="Message" matInput cdkTextareaAutosize #autosize="cdkTextareaAutosize" cdkAutosizeMinRows="1" cdkAutosizeMaxRows="10"></textarea>
+                            <mat-label>Send a message</mat-label>
+                            <textarea formControlName="Message" matInput cdkTextareaAutosize #autosize="cdkTextareaAutosize" cdkAutosizeMinRows="1" cdkAutosizeMaxRows="10"></textarea>
                         </mat-form-field>
                     </form>
                     <button mat-mini-fab color="primary" (click)="sendMessage($event)"><mat-icon>arrow_upward</mat-icon></button>
@@ -59,15 +66,24 @@
         </mat-sidenav>
             
         <mat-sidenav-content>
-            <div class="meeting-messenger-toggle" *ngIf="!isDashboardHidden">
+            <div class="meeting-toggles" *ngIf="!isDashboardHidden">
+                <button mat-fab color="warm" class="control-message" [matMenuTriggerFor]="menu">
+                    <mat-icon>people_outline</mat-icon>
+                </button>
                 <button mat-fab color="primary" class="control-message" (click)="snav.toggle()">
                     <mat-icon>chat_bubble_outline</mat-icon>
                 </button>
+            
+                <mat-menu #menu="matMenu" yPosition="above">
+                    <button mat-menu-item *ngFor="let user of users; index as i">{{ user.member }} ({{ user.userType }})</button>
+                </mat-menu>
             </div>
             <div class="meeting-dashboard" *ngIf="!isDashboardHidden">
-                meeting dashboard
-                <button mat-raised-button color="primary" (click)="enterVideoConferenceMode($event)">Videoconference</button>
-                <button mat-raised-button color="primary" (click)="enterScreenSharingMode($event)">Screensharing</button>
+                <div class="dashboard-title">
+                    meeting dashboard
+                    <button mat-raised-button color="primary" (click)="enterVideoConferenceMode($event)">Videoconference</button>
+                    <button mat-raised-button color="primary" (click)="enterScreenSharingMode($event)">Screensharing</button>
+                </div>
 
             </div>
 
@@ -87,6 +103,10 @@
                     <button mat-fab color="warm" class="control-microphone" (click)="muteMicrophone($event)">
                         <mat-icon *ngIf="!isMuted">mic</mat-icon>
                         <mat-icon *ngIf="isMuted">mic_off</mat-icon>
+                    </button>
+                    <button mat-fab color="warm" class="control-microphone" (click)="disableVideoCamera($event)">
+                        <mat-icon *ngIf="!isPaused">videocam</mat-icon>
+                        <mat-icon *ngIf="isPaused">videocam_off</mat-icon>
                     </button>
                     <button mat-fab color="warm">
                         <mat-icon>more_horiz</mat-icon>

@@ -2,7 +2,7 @@
 
 // Add imports for other components in your app.
 @import '../node_modules/@angular/material/theming';
-@import '../node_modules/@angular/material/prebuilt-themes/deeppurple-amber.css';
+// @import '../node_modules/@angular/material/prebuilt-themes/deeppurple-amber.css';
 @import '~ngx-toastr/toastr';
 
 // Imports functions, variables, and mixins that are needed by other Bootstrap files
@@ -44,9 +44,11 @@ $theme: mat-light-theme($primary, $accent, $warn);
 
 @include angular-material-theme($theme);
 
-body {
+html, body {
     margin: 0;
     padding: 0;
+    width: 100%;
+    height: 100%;
 }
 
 .app-container {

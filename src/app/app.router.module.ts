@@ -21,7 +21,7 @@ const routes: Routes = [
     loadChildren: './modules/main/main.module#MainModule'
   },
   {
-    path: 'meeting/:userName',
+    path: 'meeting',
     loadChildren: './modules/meeting/meeting.module#MeetingModule',
     canActivate: [AuthGuardService],
     resolve: {

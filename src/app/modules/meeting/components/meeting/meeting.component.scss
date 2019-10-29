@@ -1,37 +1,4 @@
-// Meeting Indeterminate progres bar Styles
-
-.meeting-progress-container {
-    display: flex;
-    height: 100%;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-}
-
-html, body {
-  height: 100%;
-}
-
-.meeting-progress {
-    width: 33.33%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-}
-
-
-.meeting-progress-bar {
-    position: relative;
-    width: 100%;
-}
-
-.mat-progress-bar {
-    height: 15px;
-    border-radius: 5px;
-}
-
-// Meeting Dashboard Styles
+// Global Component Styles for Meeting Component
 .video-container, .video-wrap, .main-video, video,
 .meeting-container,
 .message-container,
@@ -47,39 +14,111 @@ html, body {
   position: relative;
 }
 
-.meeting-dashboard {
+h2 {
+  margin-bottom: 5px;
+}
+
+.meeting-toggles {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 1;
+  height: 125px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+}
+
+
+
+
+
+
+
+
+
+
+// Meeting Indeterminate progres bar Styles
+.meeting-progress-container {
+    display: flex;
+    height: 100%;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.meeting-progress {
+    width: 33.33%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.meeting-progress-bar {
+    position: relative;
+    width: 100%;
+}
+
+.mat-progress-bar {
+    height: 15px;
+    border-radius: 5px;
+}
+
+
+
+
+
+
+
+
+// Meeting Dashboard Styles
+.dashboard-title {
   margin: 10px;
 }
 
+
+
+
+
+
+
+
+// Button Styles
+.mat-mini-fab {
+  margin-left: 5px;
+}
+
+
+
+
+
+
+
+
+// Video Conference Styles
 .video-controls {
   display: flex;
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
 
-  width: 300px;
+  width: 380px;
   // background-color: rgb(201, 197, 197);
   // margin: 10px 10px 3px 10px;
   position: absolute;
   z-index: 14;
   bottom: 100px;
   left: 50%;
-  margin-left: -150px;
+  margin-left: -190px;
   
 }
 
 .control-close {
   background-color: rgb(255, 74, 66);
 }
-
-h2 {
-  margin-bottom: 5px;
-}
-
-// Styles for video section
-// .video-page-holder === .video-container
-
-
 
 .video-container {
   display: none;
@@ -114,7 +153,10 @@ h2 {
 }
 
 
-// Sidenav Messenger
+
+
+
+// Sidenav Messenger Styles
 .sidenav-container {
   height: 100%;
 }
@@ -124,13 +166,12 @@ h2 {
   height: 100%;
 }
 
-.mat-form-field {
-  width: 100%;
+.header {
+  margin-bottom: 5px;
 }
 
-.mat-form-field > .mat-form-field-wrapper {
-  padding-bottom: 0 !important;
-  margin: 0 !important;
+.mat-drawer-content {
+  overflow: visible;
 }
 
 .message-container {
@@ -143,13 +184,10 @@ textarea {
   overflow: scroll;
 }
 
-
-
-.mat-mini-fab {
-  margin-left: 5px;
-}
-
 .message-title {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
   padding: 10px;
 }
 
@@ -163,7 +201,8 @@ textarea {
 }
 
 .message {
-  width: 340px;
+  max-width: 340px;
+  width: auto;
   height: auto;
   padding: 10px 15px;
   margin: 5px;
@@ -181,16 +220,32 @@ textarea {
   padding: 5px;
 }
 
-.meeting-messenger-toggle {
-  position: absolute;
-  bottom: 10px;
-  left: 10px;
-  z-index: 1;
+
+
+
+
+
+
+// Form Field Styles
+.mat-form-field {
+  width: 100%;
 }
 
-.header {
-  margin-bottom: 5px;
+::ng-deep .mat-form-field > .mat-form-field-wrapper {
+  padding-bottom: 0 !important;
+  margin: 0 !important;
 }
+
+
+
+
+
+
+
+
+
+
+
 
 
 // Screen Sharing Feature Styles

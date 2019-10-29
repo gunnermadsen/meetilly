@@ -16,7 +16,7 @@ import { MaterialModule } from './material.module';
         MaterialModule,
         ToastrModule.forRoot({
             timeOut: 4000,
-            positionClass: 'toast-bottom-right'
+            positionClass: 'toast-top-left'
         }),
         RouterModule
     ],

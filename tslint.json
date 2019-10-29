@@ -68,7 +68,7 @@
     "comment-format": true,
     "variable-name": false,
     "no-shadowed-variable": false,
-
+    "curly": false,
     "no-empty-interface": false,
     "no-string-literal": false
   }
