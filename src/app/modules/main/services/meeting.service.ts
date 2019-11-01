@@ -7,17 +7,18 @@ import { delay, distinct, retryWhen, delayWhen } from 'rxjs/operators';
 @Injectable({ providedIn: 'root' })
 export class MeetingService {
     private _signal$: Observable<any> = this._socket.fromEvent<any>('signal')
-    private _connection$: Observable<any> = this._socket.fromEvent<any>('open')
+    private _ready$: Observable<any> = this._socket.fromEvent<any>('ready')
     private _waiting$: Observable<any> = this._socket.fromEvent<any>('waiting')
     private _closed$: Observable<any> = this._socket.fromEvent<any>('closed')
     private _exchange$: Observable<any> = this._socket.fromEvent<any>('exchange')
+    private _multi$: Observable<any> = this._socket.fromEvent<any>('multi')
 
     public get signal$(): Observable<any> {
         return this._signal$
     }
 
-    public get connection$(): Observable<any> {
-        return this._connection$
+    public get ready$(): Observable<any> {
+        return this._ready$
     }
 
     public get waiting$(): Observable<any> {
@@ -29,16 +30,11 @@ export class MeetingService {
     }
 
     public get exchange$(): Observable<any> {
-        return this._exchange$ //.pipe(
-            // distinct(), //(message: IPayload) => message.userType && message.member
-            // retryWhen((errors: any) => {
-            //     return errors.pipe(
-            //         delayWhen(() => {
-            //             return timer(2000);
-            //         })
-            //     );
-            // })
-        // )
+        return this._exchange$
+    }
+
+    public get multi$(): Observable<any> {
+        return this._multi$
     }
 
     public get socket(): Socket {

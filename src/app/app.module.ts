@@ -19,7 +19,8 @@ export const config: SocketIoConfig = {
     reconnection: true,
     timeout: 30000,
     reconnectionDelay: 1500,
-    
+    upgrade: true,
+    autoConnect: true
   }
 }
 

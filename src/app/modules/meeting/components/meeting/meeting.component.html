@@ -19,38 +19,56 @@
         <mat-sidenav #snav [mode]="'side'" [position]="'end'" [opened]="true">
             <div class="message-container">
                 <div class="message-title">
-                    <h3>Start a conversation</h3>
+                    <!-- <h3>Start a conversation</h3> -->
                     <mat-form-field appearance="outline">
                         <mat-label>Members</mat-label>
-                        <mat-select>
-                            <mat-option *ngFor="let user of users; index as i" [value]="i" [disabled]="user.member === member">{{ user.member }} ({{ user.userType }})</mat-option>
+                        <mat-select (selectionChange)="setSelectedUser($event)" [formControl]="selectedUser">
+                            <mat-option [value]="100" [disabled]="true">Select a user</mat-option>
+                            <mat-option [value]="i" *ngFor="let user of users; index as i" > <!-- [disabled]="user.userType === type" -->
+                                {{ user.member }} ({{ user.userType }})
+                            </mat-option>
                         </mat-select>
                     </mat-form-field>
+                    <div class="message-body">
+                        <mat-tab-group *ngIf="isMessageTargetSelected" [selectedIndex]="selectedUser.value" (selectedTabChanged)="setCurrentClientId($event)" > <!-- mat-stretch-tabs  (selectedIndexChange)="selected.setValue($event)" -->
+                            <mat-tab *ngFor="let tab of tabs; index as i">
+                                <ng-template mat-tab-label>
+                                    <div class="member-tab"> 
+                                        <p class="tab-title">{{ tab.member }}</p>
+                                        <button mat-icon-button class="tab-label" (click)="closeTab($event, i)"><mat-icon>close</mat-icon></button>
+                                    </div>
+                                </ng-template>
+                                <div class="message-body">
+                                    <div class="header">
+                                        <!-- Display a weekday and time when the conversation was started -->
+                                        <!-- <mat-divider *ngIf="messages.length"> {{ messages[0].timestamp | date : 'EEE, h' }} </mat-divider> -->
+                                    </div>
+                                    <div class="message" *ngFor="let message of messages[i]; index as j"
+                                        [ngStyle]="{ 'align-self': alignMessage(message.userType) }"
+                                        [style.background-color]="setBackgroundColor(message.userType)">
+                                
+                                        <div [ngSwitch]="message.contentType">
+                                            <div *ngSwitchCase="'file'">
+                                                <a href="#">{{ message.filename }}</a>
+                                            </div>
+                                            <div *ngSwitchCase="'message'">
+                                                {{ message.body }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- <button mat-raised-button class="example-delete-tab-button" [disabled]="tabs.length === 1"
+                                    (click)="removeTab(index)">
+                                    Delete Tab
+                                </button> -->
+                            </mat-tab>
+                        </mat-tab-group>
+                    </div>
                     <!-- <button mat-icon-button color="primary" class="control-message" (click)="snav.close()">
                         <mat-icon>close</mat-icon>
                     </button> -->
                 </div>
-                <div class="message-body">
-                    <div class="header">
-                        <!-- Display a weekday and time when the conversation was started -->
-                        <!-- <mat-divider *ngIf="messages.length"> {{ messages[0].timestamp | date : 'EEE, h' }} </mat-divider> -->
-                    </div>
-                    <div class="message" 
-                        *ngFor="let message of messages; index as i" 
-                        [ngStyle]="{ 'align-self': alignMessage(message.userType) }"
-                        [style.background-color]="setBackgroundColor(message.userType)">
-
-                        <div [ngSwitch]="message.contentType">
-                            <div *ngSwitchCase="'file'">
-                                <a href="#">{{ message.filename }}</a>
-                            </div>
-                            <div *ngSwitchCase="'message'">
-                                {{ message.body }}
-                            </div>
-                        </div>
-
-                    </div>
-                </div>
+                
                 <div class="message-input">
                     <form class="message-form" [formGroup]="messengerForm">
                         <mat-form-field appearance="outline">
@@ -80,7 +98,6 @@
             </div>
             <div class="meeting-dashboard" *ngIf="!isDashboardHidden">
                 <div class="dashboard-title">
-                    meeting dashboard
                     <button mat-raised-button color="primary" (click)="enterVideoConferenceMode($event)">Videoconference</button>
                     <button mat-raised-button color="primary" (click)="enterScreenSharingMode($event)">Screensharing</button>
                 </div>
@@ -92,11 +109,18 @@
                     <div class="main-video">
                         <video autoplay #mainVideoArea></video>
                     </div>
-                    <div class="small-video">
-                        <video autoplay muted #smallVideoArea></video>
+                    <div class="small-video-bar">
+                        <div class="small-video-remote-container" *ngIf="webcamStreamsLength > 1">
+                            <div class="small-video-remote" *ngFor="let stream of webcamStreams | keyvalue; index as i">
+                                <video autoplay muted #remoteVideo></video>
+                            </div>
+                        </div>
+                        <div class="small-video-local">
+                            <video autoplay muted #smallVideoArea></video>
+                        </div>
                     </div>
                 </div>
-                <div class="video-controls" *ngIf="displayControls$ | async">
+                <div id="videoconference-controls" class="video-controls" *ngIf="displayControls$ | async">
                     <button mat-fab color="primary" class="control-message" (click)="snav.toggle()">
                         <mat-icon>chat_bubble_outline</mat-icon>
                     </button>

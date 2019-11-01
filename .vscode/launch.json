@@ -5,7 +5,27 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug Guest",
+            "name": "Debug Guest #1",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:4200",
+            "webRoot": "${workspaceFolder}",
+            "sourceMapPathOverrides": {
+                "webpack:/*": "${webRoot}/*",
+                "/./*": "${webRoot}/*",
+                "/src/*": "${webRoot}/*",
+                "/*": "*",
+                "/./~/*": "${webRoot}/node_modules/*"
+            },
+            "skipFiles": [
+                "${workspaceFolder}/dist",
+                "${workspaceFolder}/src/environments",
+                "${workspaceFolder}/node_modules/**/*.js",
+                "<node_internals>/**/*.js"
+            ]
+        },
+        {
+            "name": "Debug Guest #2",
             "type": "chrome",
             "request": "launch",
             "url": "http://localhost:4200",

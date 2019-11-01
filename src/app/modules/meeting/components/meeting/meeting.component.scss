@@ -132,19 +132,32 @@ h2 {
 .video-wrap 
 .main-video,
 .video-container 
-.video-wrap 
-.small-video {
+.video-wrap {
   position: absolute;
+  
   background: #181818;
 }
 
-.video-container .video-wrap .small-video {
-  bottom:0;
-  right: 0;
-  width: 180px;
-  height: 100px;
-  border-left: 1px solid #888;
-  border-top: 1px solid #888;
+
+.video-container .video-wrap .small-video-bar {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+
+  height: 90%;
+  width: 200px;
+
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  
+  background-color: transparent;
+
+  .small-video-local {
+    width: 180px;
+    height: 100px;
+    border: 1px solid grey;
+  }
 }
 
 .video-container .video-wrap .main-video {
@@ -177,6 +190,7 @@ h2 {
 .message-container {
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
 }
 
 textarea {
@@ -184,9 +198,40 @@ textarea {
   overflow: scroll;
 }
 
+.mat-tab-group {
+  width: 100%;
+}
+
+.mat-tab-label {
+  padding: 0;
+
+  .mat-tab-label-content {
+    width: 100%;
+  }
+}
+
+.tab-label {
+  margin-left: auto;
+}
+
+.member-tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  width: 100%;
+
+  p.tab-title {
+    margin-bottom: 0;
+    margin-left: 10px;
+  }
+}
+
+
+
 .message-title {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
   padding: 10px;
 }
@@ -194,7 +239,7 @@ textarea {
 .message-body {
   display: flex;
   flex-direction: column;
-  height: 90%;
+  height: 100%;
   width: 100%;
   padding: 10px;
   overflow: scroll;
