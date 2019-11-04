@@ -4,50 +4,40 @@ import { FormGroup, FormControl } from '@angular/forms'
 
 import { takeUntil, map, tap, debounceTime, skipWhile } from 'rxjs/operators'
 import { Subject, merge, Observable, fromEvent, BehaviorSubject, combineLatest } from 'rxjs'
-
+import { sizeConstraints } from './constraints'
 import adapter from 'webrtc-adapter'
 import { ToastrService } from 'ngx-toastr'
 import * as md5 from 'md5'
 
 import { MeetingService } from '@/modules/main/services/meeting.service'
 import { IPayload } from '@/modules/main/models/payload.model'
-import { transition, trigger, state, style, animate } from '@angular/animations'
 import { MatSelectChange } from '@angular/material'
-import { DataChannelConnections, WebcamStreams, DisplayStreams, PeerConnections, IMessage } from '@/modules/meeting/models/meeting.model'
+import { DataChannelConnections, WebcamStreams, DisplayStreams, PeerConnections } from '@/modules/meeting/models/meeting.model'
+import { Store } from '@ngrx/store'
+import { AppState } from '@/reducers'
+import { setMeetingViewState } from '@/modules/main/store/actions/meeting.actions'
 
 @Component({
   selector: 'app-meeting',
   templateUrl: './meeting.component.html',
   styleUrls: ['./meeting.component.scss'],
-  // encapsulation: ViewEncapsulation.None
 })
 export class MeetingComponent implements OnInit, OnDestroy {
-
-  @ViewChild('smallVideoArea', { static: false }) 
-  private _smallVideoArea: ElementRef<HTMLVideoElement>
-
-  @ViewChild('mainVideoArea', { static: false }) 
-  private _mainVideoArea: ElementRef<HTMLVideoElement>
-
-  @ViewChild('screenShareVideoArea', { static: false }) 
-  private _screenShareVideoArea: ElementRef<HTMLVideoElement>
-
-  @ViewChild('videoContainer', { static: false }) 
-  private _videoContainer: ElementRef<HTMLElement>
-
-  @ViewChild('screenShareContainer', { static: false }) 
-  private _screenShareContainer: ElementRef<HTMLElement>
-
-  @ViewChildren('remoteVideo') 
-  private _remoteVideoAreas: QueryList<ElementRef<HTMLVideoElement>>
-
+  @ViewChild('smallVideoArea', { static: false }) private _smallVideoArea: ElementRef<HTMLVideoElement>
+  @ViewChild('mainVideoArea', { static: false }) private _mainVideoArea: ElementRef<HTMLVideoElement>
+  @ViewChild('screenShareVideoArea', { static: false }) private _screenShareVideoArea: ElementRef<HTMLVideoElement>
+  @ViewChild('videoContainer', { static: false }) private _videoContainer: ElementRef<HTMLElement>
+  @ViewChild('screenShareContainer', { static: false }) private _screenShareContainer: ElementRef<HTMLElement>
+  @ViewChildren('remoteVideo') private _remoteVideoAreas: QueryList<ElementRef<HTMLVideoElement>>
   private messengerForm: FormGroup
   public selectedUser: FormControl = new FormControl()
   private _dataChannels: DataChannelConnections = {}
   private _webcamStreams: WebcamStreams = {}
   private _displayStreams: DisplayStreams = {}
   private _connections: PeerConnections = {}
-  private _transceiver: (track: MediaStreamTrack) => RTCRtpTransceiver
+  public speakerList: MediaDeviceInfo[] = []
+  public cameraList: MediaDeviceInfo[]
+  public microphoneList: MediaDeviceInfo[]
   private _meetingID: number = null
   private _clientIds: string[] = []
   private _clientId: string
@@ -71,8 +61,8 @@ export class MeetingComponent implements OnInit, OnDestroy {
   public isMuted: boolean = false
   public isDashboardHidden: boolean = false
   public isPaused: boolean = false
+  public isSharingScreen: boolean = false
   public isMessageTargetSelected: boolean = false
-  
 
   public get webcamStreamsLength() {
     const value = Object.values(this._webcamStreams).length
@@ -83,7 +73,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
     return this.webcamStreams
   }
 
-  constructor(private _route: ActivatedRoute, private _meetingService: MeetingService, private _cdr: ChangeDetectorRef, private _toastrService: ToastrService) {
+  constructor(private _route: ActivatedRoute, private _meetingService: MeetingService, private _cdr: ChangeDetectorRef, private _toastrService: ToastrService, private _store$: Store<AppState>) {
     this._meetingID = this._route.snapshot.queryParams.meetingId
     this.member = this._route.snapshot.queryParams.member
     this.type = this._route.snapshot.queryParams.mode
@@ -95,12 +85,10 @@ export class MeetingComponent implements OnInit, OnDestroy {
       Message: new FormControl('')
     })
 
-    const id = this._generateClientId()
+    const id = md5(Math.floor(Math.random() * 8932839).toString())
     this._localId = id
-    console.info(`Client Id Generated: ${id}`)
     
     this._initializeMeetingSignaling(id)
-    
   }
   
   ngOnInit() {
@@ -108,7 +96,6 @@ export class MeetingComponent implements OnInit, OnDestroy {
   }
 
   private _listenForOpenConnection(): void {
-    // wait until ready: when 1 or more users are in a room
     this._meetingService.ready$.pipe(takeUntil(this.destroy$)).subscribe((payload: IPayload) => {
       this.logEvent(`Initial Signal Emitted by ${this.type}`)
       this._addMember(payload)
@@ -134,15 +121,9 @@ export class MeetingComponent implements OnInit, OnDestroy {
       this._meetingService.multi$
     )
     .pipe(
-      map((payload: IPayload) => {
-        if (payload.mode === 'exchange') {
-          this._addMember(payload)
-        }
-        return payload;
-      }),
+      map((payload: IPayload) => payload),
       takeUntil(this.destroy$)
-    )
-    .subscribe((payload: any) => this._handleSocketMessageEvent(payload))
+    ).subscribe((payload: any) => this._handleSocketMessageEvent(payload))
 
     this._checkForReadiness(id)
   }
@@ -182,17 +163,14 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this._connections[id].onnegotiationneeded           = this._handleNegotiationNeededEvent          .bind(this, id)
     this._connections[id].ontrack                       = this._handleTrackEvent                      .bind(this, id)
 
-    // reveal the meeting room
     this.isStreamingReady = true
 
-    // for reference only
+    this._addMember(payload)
+
     this._clientId = id
 
-    // add the id to the clients list of ids, 
-    // used for referencing peer connections
     this._clientIds.push(id)
 
-    // notify other users that a new user has an RTC Peer connection
     this._meetingService.signal('exchange', {
       clientId: id, 
       meetingId: this._meetingID, 
@@ -209,14 +187,11 @@ export class MeetingComponent implements OnInit, OnDestroy {
         this._checkForReadiness(event.clientId)
         break
       
-      case "joinroom":
-        
-        break
-
       case "exchange":
         this._addMember(event)
         break
-      
+
+      case "joinroom":
       case "signaling":
         if (!this._connections[event.clientId]) {
           this._initializePeerConnection(event)
@@ -250,31 +225,25 @@ export class MeetingComponent implements OnInit, OnDestroy {
         this._logError("Unknown message received:")
         this._logError(event)
     }
-
   }
 
   private _handleICEGatheringStateChangeEvent(id: string) {
-    this.logEvent(`*** ICE gathering state changed to: ${this._connections[id].iceGatheringState}`)
+    this.logEvent(`**** ICE gathering state changed to: ${this._connections[id].iceGatheringState}`)
   }
 
   private _handleSignalingStateChangeEvent(id: string) {
-    this.logEvent(`*** WebRTC signaling state changed to: ${this._connections[id].signalingState}`)
-    // switch (this._connections[id].signalingState) {
-    //   case "closed":
-    //     this._closeVideoCall()
-    //     break
-    // }
+    this.logEvent(`**** WebRTC signaling state changed to: ${this._connections[id].signalingState}`)
   }
 
   private _handleTrackEvent(id: string, event: RTCTrackEvent) {
-    this.logEvent(`*** Track event triggering state change on main video area srcObject`)
+    this.logEvent(`**** Track event triggering state change on main video area srcObject`)
     this._mainVideoArea.nativeElement.srcObject = event.streams[0]
   }
 
   private _handleICEConnectionStateChangeEvent(id: string) {
     
     const state = this._connections[id].iceConnectionState
-    this.logEvent(`*** ICE connection state changed to: ${state}`)
+    this.logEvent(`**** ICE connection state changed to: ${state}`)
 
     switch (state) {
       case "closed":
@@ -286,17 +255,13 @@ export class MeetingComponent implements OnInit, OnDestroy {
         this.logEvent(`---> Peer connection has '${state}'. Attempting to reconnect to ${this.type}`)
         this.endVideoConference(state)
         this.closeMeeting()
-        // this._connections[id].createOffer({ iceRestart: true })
-        // this._checkForReadiness(even)
-        // this._initializeMeeting()
-        // this._initializeMeetingOpenListener()
         break
     }
   }
 
   private _handleICECandidateEvent(id: string, event: RTCPeerConnectionIceEvent) {
     if (event.candidate) {
-      this.logEvent(`*** Outgoing ICE candidate: ${event.candidate.candidate}`)
+      this.logEvent(`**** Outgoing ICE candidate: ${event.candidate.candidate}`)
 
       this._meetingService.signal('signal', {
         meetingId: this._meetingID,
@@ -310,86 +275,85 @@ export class MeetingComponent implements OnInit, OnDestroy {
   }
 
   private async _handleNegotiationNeededEvent(id: string, event: Event) {
-    this.logEvent("*** Negotiation needed")
+    this.logEvent("**** Negotiation needed")
 
     if (this._connections[id].signalingState !== "stable") {
-      this.logEvent(`--->* Signaling state is '${this._connections[id].signalingState}'. Will negotiate new offer when signaling state is stable.`)
+      this.logEvent(`--->* WARNING: --->* Signaling state is: '${this._connections[id].signalingState}'. Will negotiate new offer when signaling state is stable.`)
       return
     }
 
     try {
-
-      const offer = await this._connections[id].createOffer()
-      this.logEvent("---> Offer Created")
-
-      await this._connections[id].setLocalDescription(offer)
-      this.logEvent("---> Set local description to the offer")
-
-      // Send the offer to the remote peer.
-      this.logEvent(`---> Sending the offer to the ${this.oppositeUserType}, using localDescription: ${this._connections[id].localDescription}`)
-
-      this._meetingService.signal('signal', {
-        meetingId: this._meetingID,
-        clientId: id,
-        member: this.member,
-        mode: "offer",
-        data: this._connections[id].localDescription,
-        userType: this.type
-      })
+      if (this._connections[id].signalingState != "have-remote-offer") {
+        const offer = await this._connections[id].createOffer()
+        this.logEvent("---> Offer Created")
+  
+        await this._connections[id].setLocalDescription(offer)
+        this.logEvent("---> Set local description to the offer")
+  
+        this._meetingService.signal('signal', {
+          meetingId: this._meetingID,
+          clientId: id,
+          member: this.member,
+          mode: "offer",
+          data: this._connections[id].localDescription,
+          userType: this.type
+        })
+        this.logEvent(`---> Sending the offer to the ${this.oppositeUserType}, using localDescription: ${this._connections[id].localDescription}`)
+      } else {
+        return
+      }
 
     } catch (error) {
-
       this._reportError(error)
-
     }
   }
 
   private async _handleNewICECandidateMessage(payload: IPayload) {
 
     const candidate: RTCIceCandidate = new RTCIceCandidate(payload.data)
+    this.logEvent("**** Adding received ICE candidate")
 
     const id = payload.clientId
 
-    if (!this._connections[payload.clientId]) {
-      this._initializePeerConnection(payload)
-    }
-
-    this.logEvent("*** Adding received ICE candidate: " + JSON.stringify(candidate))
-
     try {
-
-      if (candidate) {
+      /**
+       * "stable" | 
+       * "have-local-offer" | 
+       * "have-remote-offer" | 
+       * "have-local-pranswer" | 
+       * "have-remote-pranswer" | 
+       * "closed"
+       */
+      if (candidate && this._connections[id].signalingState === "stable") {
         
         await this._connections[id].addIceCandidate(candidate)
         this.logEvent("---> Ice Candiate Added")
 
-      } else {
+      } 
+      else {
         return
       }
 
     } catch (error) {
-
       this._reportError(error)
-
     }
   }
 
   private async _handleOfferMessage(message: IPayload) {
     
-    this.logEvent(`*** Received video chat offer from ${this.oppositeUserType}`)
+    this.logEvent(`**** Received video chat offer from ${this.oppositeUserType}`)
 
     const id = message.clientId
 
     if (!this._connections[id]) {
-      this.logEvent(`Client does not have property of: ${id}`)
+      this.logEvent(`---> A connection with id: ${id}, does not exist. Triggering connection creation`)
       this._initializePeerConnection(message)
-      // return
     }
   
     const description: RTCSessionDescription = new RTCSessionDescription(message.data)
 
     try {
-      if (this._connections[id].signalingState !== "stable" && description.type === 'offer') {
+      if (this._connections[id].signalingState !== 'stable' && description.type === 'offer') {
 
         this.logEvent("---> But the signaling state isn't stable, so triggering rollback")
 
@@ -408,129 +372,104 @@ export class MeetingComponent implements OnInit, OnDestroy {
       this._logError(error)
     }
 
-    if (!this._webcamStreams[id]) {
+    try {
 
-      try {
+      if (this._connections[id].signalingState === "have-remote-offer" || this._connections[id].signalingState === "have-local-pranswer") {
+        this.logEvent("---> Creating and Sending Answer to Caller")
+        const answer: RTCSessionDescriptionInit = await this._connections[id].createAnswer()
 
-        if (this._connections[id].signalingState === "have-remote-offer" || this._connections[id].signalingState === "have-local-pranswer") {
-          this.logEvent("---> Creating and Sending Answer to Caller")
-          const answer: RTCSessionDescriptionInit = await this._connections[id].createAnswer()
-  
-          this.logEvent("---> Setting Answer to Local Description")
-          await this._connections[id].setLocalDescription(answer)
-        } else {
-          return
-        }
+        this.logEvent("---> Setting Answer to Local Description")
+        await this._connections[id].setLocalDescription(answer)
 
-      } catch (error) {
-        this._logError(error)
+        this._meetingService.signal('signal', {
+          meetingId: this._meetingID,
+          clientId: id,
+          member: this.member,
+          mode: "answer",
+          data: this._connections[id].localDescription,
+          userType: this.type
+        })
+
+      } else {
+        return
       }
-
-      this._meetingService.signal('signal', {
-        meetingId: this._meetingID,
-        clientId: id,
-        member: this.member,
-        mode: "answer",
-        data: this._connections[id].localDescription,
-        userType: this.type
-      })
-
+    } catch (error) {
+      this._logError(error)
     }
   }
 
   private async _handleAnswerMessage(message: IPayload) {
-
-    this.logEvent("*** Call recipient has accepted our call")
+    this.logEvent("**** Handling Answer Message")
 
     const id = message.clientId
-    
     const description: RTCSessionDescription = new RTCSessionDescription(message.data)
 
     try {
       await this._connections[id].setRemoteDescription(description)
+      this.logEvent(`---> Set remote description for connection id: ${id}`)
 
     } catch (error) {
       this._reportError(error)
     }
-
   }
 
   public endVideoConference(event: any) {
-
-    this.logEvent("Closing the Video Conference")
-
+    this.logEvent("**** Ending the Video Conference")
     this.logEvent("--> Closing the MediaStream Tracks")
 
-    this._resetMeetingRoom()
-
-    this._meetingService.signal('signal', { meetingId: this._meetingID, mode: 'hangup', member: this.member, clientId: this._clientId })
-
+    this._resetMeetingRoom(this.selectedConnectionId)
+    this._meetingService.signal('signal', { meetingId: this._meetingID, mode: 'hangup', member: this.member, clientId: this.selectedConnectionId })
   }
 
   public closeMeeting(): void {
-    if (this._connections[this._roomId]) {
 
-      this._connections[this._roomId].getTransceivers().forEach((track: RTCRtpTransceiver) => track.stop())
+    if (this._connections[this.selectedConnectionId]) {
 
-      this.logEvent("--> Closing the peer connection")
-      this.logEvent("--> Closing the data channel")
-
-      this._connections[this._roomId].close()
-      this._dataChannels[this._roomId].close()
-      this._connections[this._roomId] = null
-      this._dataChannels = null
-      this._webcamStreams[this._roomId] = null
-      this._displayStreams[this._roomId] = null
+      this.logEvent("**** Closing the peer connection and datachannel")
+      
+      this._clientIds.forEach((id: string, index: number) => {
+        this._connections[id].getTransceivers().forEach((track: RTCRtpTransceiver) => track.stop())
+        this._connections[id].close()
+        this._dataChannels[id].close()
+        this._connections[id] = null
+        this._dataChannels = null
+        this._webcamStreams[id] = null
+        this._displayStreams[id] = null
+      })
       
       this.closeConference$.next(null)
       this.closeConference$.unsubscribe()
     }
   }
 
-  private _resetMeetingRoom(): void {
+  private _resetMeetingRoom(id: string): void {
     if (this._smallVideoArea.nativeElement.srcObject) {
-
-      this._smallVideoArea.nativeElement.pause()
-      
-      this._clientIds.forEach((id: string, index: number) => {
-        this._webcamStreams[id].getTracks().forEach((stream: MediaStreamTrack) => stream.stop())
-      })
+      this._webcamStreams[id].getTracks().forEach((stream: MediaStreamTrack) => stream.stop())
+      // this._connections[id].getSenders().forEach((sender: RTCRtpSender) => this._connections[id].removeTrack(sender))
     }
 
+    this._store$.dispatch(setMeetingViewState({ meetingViewState: false }))
+
+    this._mainVideoArea.nativeElement.srcObject = null
+    this._smallVideoArea.nativeElement.srcObject = null
+
     this._videoContainer.nativeElement.style.display = 'none'
-
     this.isVideoConfereneMode = !this.isVideoConfereneMode
-
     this.isDashboardHidden = false
   }
 
   public setSelectedUser(event: MatSelectChange): void {
-    // set the current context of the datachannel
-    this.selectedDataChannelId = this.setCurrentClientId(event.value)
-
-    // show the tab group
+    this.selectedDataChannelId = this._clientIds[event.value]
     this.isMessageTargetSelected = !this.isMessageTargetSelected
-
-    // add the user to the list of tabs
     this.tabs.push(this.users[event.value])
-
-    // add the index to the FormControl
     this.selectedUser.setValue(event.value)
   }
 
-  public setCurrentClientId(value: number): string {
-    // set current context of the datachannel
-    // this.selectedId = this._clientIds[event.value]
-    return this._clientIds[value]
-  }
-
   public closeTab(event: MouseEvent, index: number): void {
-    // remove the tab from the list of tabs
     this.tabs.splice(index, 1)
 
     if (this.tabs.length === 0) {
-      // hide the tab group and reset the selectedUser 
-      // Form Control if the tab list length is 0
+      // hide the tab group and reset the selectedUser Form Control if the tab list length is 0
       this.isMessageTargetSelected = false
       this.selectedUser.setValue(100)
     }
@@ -550,24 +489,18 @@ export class MeetingComponent implements OnInit, OnDestroy {
       }
       if (index === this.users.length - 1) {
         this.users.push({ member: payload.member, meetingId: payload.meetingId, clientId: payload.clientId, userType: payload.userType })
-        this.logEvent(`*** Member: ${payload.member}: (${payload.userType}) has been added`)
+        this.logEvent(`**** Member: ${payload.member}: (${payload.userType}) has been added`)
       }
     })
-    console.log(this.users)
-  }
-
-  private _generateClientId(): string {
-    return md5(Math.floor(Math.random() * 8932839).toString())
   }
 
   private _hangupAndNotify(payload: IPayload): void {
-    // end the video conference on the receiving end.
-    // for multi member video conferences, we will 
-    // simply want to notify the other members that 
-    // the person has left the room
+    // end the video conference on the receiving end. for multi member video conferences, we will 
+    // simply want to notify the other members that the person has left the room
     if (this._clientIds.length === 1) {
-      this._resetMeetingRoom()
+      this._resetMeetingRoom(payload.clientId)
     }
+
     this._toastrService.info(`${payload.member} has left the meeting`)
   }
 
@@ -581,8 +514,68 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this._webcamStreams[this.selectedConnectionId].getVideoTracks().map((stream: MediaStreamTrack) => stream.enabled = !stream.enabled)
   }
 
-  private _watchForMouseMovement(): void {
+  public changeVideo(deviceId: string, type: string): void {
+    const constraints = {
+      audio: true,
+      video: {
+        deviceId: { exact: deviceId },
+        ...sizeConstraints
+      }
+    }
 
+    this.changeDevice(type, constraints)
+  }
+
+  public changeAudio(deviceId: string, type: string): void {
+    const constraints = {
+      audio: {
+        deviceId: { exact: deviceId },
+      },
+      video: sizeConstraints
+    }
+
+    this.changeDevice(type, constraints)
+  }
+
+  public async changeDevice(type: string, constraints: any): Promise<void> {
+
+    let track: MediaStreamTrack
+    const id = this.selectedConnectionId
+
+    try {
+      this._webcamStreams[id] = await navigator.mediaDevices.getUserMedia(constraints)
+
+      switch (type) {
+        case "audiooutput":
+        case "audioinput": 
+          track = this._webcamStreams[id].getAudioTracks()[0]
+          break
+        case "videoinput": 
+          track = this._webcamStreams[id].getVideoTracks()[0]
+          this._smallVideoArea.nativeElement.srcObject = this._webcamStreams[id]
+          break
+      }
+
+      const sender = this._connections[id].getSenders().find((sender: RTCRtpSender) => sender.track.kind === track.kind)
+      sender.replaceTrack(track)
+
+    } catch (error) {
+      this._handleGetUserMediaError(error)
+    }
+  }
+
+  private async _getDeviceList(): Promise<void> {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      this.cameraList = devices.filter((device: MediaDeviceInfo) => device.kind === "videoinput" && device.deviceId !== "default")
+      this.speakerList = devices.filter((device: MediaDeviceInfo) => device.kind === "audiooutput" && device.deviceId !== "default")
+      this.microphoneList = devices.filter((device: MediaDeviceInfo) => device.kind === "audioinput" && device.deviceId !== "default")
+    } catch (error) {
+      this._logError(error)
+    }
+  }
+
+  private _watchForMouseMovement(): void {
     combineLatest([
       fromEvent(document.getElementById('videoconference-controls'), 'mouseenter').pipe(
         skipWhile(() => !this._displayControls$.value),
@@ -591,111 +584,104 @@ export class MeetingComponent implements OnInit, OnDestroy {
           return this._displayControls$.next(true);
         })
       ),
+      fromEvent(document.getElementById('hardware-menu'), 'click').pipe(
+        tap((event: MouseEvent) => {
+          event.preventDefault()
+          event.stopPropagation()
+          this._displayControls$.next(true);
+        }),
+        debounceTime(10000),
+        tap(() => this._displayControls$.next(false))
+      ),
       fromEvent(document, 'mousemove').pipe(
-        skipWhile(() => !this._displayControls$.value),
-        tap((event: MouseEvent) => this._displayControls$.next(true)),
+        skipWhile(() => this._displayControls$.value),
+        tap(() => this._displayControls$.next(true)),
         debounceTime(1500),
-        tap((event: MouseEvent) => this._displayControls$.next(false)),
+        tap(() => this._displayControls$.next(false)),
       ),
       fromEvent(document, 'mouseleave').pipe(
-        tap((event: MouseEvent) => this._displayControls$.next(false))
+        tap(() => this._displayControls$.next(false))
       )
-    ])
-    .pipe(takeUntil(this.closeConference$))
-    .subscribe()
+    ]).pipe(takeUntil(this.closeConference$)).subscribe()
   }
 
-  public enterVideoConferenceMode(event: MouseEvent): void {
-    this.logEvent(`*** Entering Video Conference mode`)
+  public async configureVideoConferenceMode(): Promise<void> {
+    this.logEvent(`**** Entering Video Conference mode`)
 
     this.isDashboardHidden = true
-
+    // for now, set the first id in the list of ids to the main id
+    this.selectedConnectionId = this._clientIds[0]
+    const id = this.selectedConnectionId
     this._videoContainer.nativeElement.style.display = 'inline-block'
-    
-    const constraints: MediaStreamConstraints = {
+  
+    this._getDeviceList()
+
+    this._store$.dispatch(setMeetingViewState({ meetingViewState: true }))
+
+    const constraints = {
       audio: true,
-      video: {
-        width: { min: 1280, ideal: 1280, max: 1920 },
-        height: { min: 720, ideal: 720, max: 1080 }
-      }
+      video: sizeConstraints
     }
     
-    this._clientIds.forEach( 
-      async (id: string, index: number) => {
-        try {
-          this._webcamStreams[id] = await navigator.mediaDevices.getUserMedia(constraints)
-          this.logEvent(`---> Acquired user media for ${this.oppositeUserType}`)
-          
-          // we only want to set the srcObject once, 
-          // even if there are multiple members in the meeting
-          if (index === 0) {
-            this._smallVideoArea.nativeElement.srcObject = this._webcamStreams[id]
-            this.selectedConnectionId = id
-            this.logEvent(`---> Added webcam stream to small video area element on ${this.oppositeUserType}`)
-          }
-          
-          // add the tracks to the RTCPeerConnection
-          this._addTracksToConnection(this._webcamStreams[id], id)
+    try {
+      this._webcamStreams[id] = await navigator.mediaDevices.getUserMedia(constraints)
 
-          this._watchForMouseMovement()
-          // this._configureAudioContext()
+      this.logEvent(`---> Acquired user media for ${this.oppositeUserType}`)
 
-        } catch (error) {
-          this._handleGetUserMediaError(error)
-          return
-        }
-      }
-    )
-      
+      this._smallVideoArea.nativeElement.srcObject = this._webcamStreams[id]
+      this.selectedConnectionId = id
+      this.logEvent(`---> Added webcam stream to small video area element on ${this.oppositeUserType}`)
+
+      this._addTracksToConnection(this._webcamStreams[id], id)
+
+      this._watchForMouseMovement()
+
+    } catch (error) {
+      this._handleGetUserMediaError(error)
+    }
   }
 
-  public async enterScreenSharingMode(event: MouseEvent): Promise<void> {
+  public async configureScreenSharingMode(): Promise<void> {
+    
+    const id = this.selectedConnectionId
+    
     try {
-      this.logEvent(`*** Entering Screen Sharing Mode`)
+      if (this.isSharingScreen) {
+        this._switchTracks(this._webcamStreams[id], id, "video")
+        this._displayStreams[id].getTracks().forEach((track: MediaStreamTrack) => track.stop())
+        const offer = await this._connections[id].createOffer({ iceRestart: true })
+        
+        await this._connections[id].setLocalDescription(offer)
+        this._addTracksToConnection(this._webcamStreams[id], id)
 
-      const constraints = {
-        audio: true,
-        video: {
-          width: { min: 1280, ideal: 1280, max: 1920 },
-          height: { min: 720, ideal: 720, max: 1080 }
-        }
+        this.isSharingScreen = false
+        return
       }
 
-      if (adapter.browserDetails.browser === 'firefox') {
-        adapter.browserShim.shimGetDisplayMedia(window, 'screen')
-      }
-      
-      // this._displayStreams[this._roomId] = await navigator.mediaDevices.getDisplayMedia(constraints)
-      this.logEvent(`---> Display media has been set to _connections[this._roomId].displayStream`)
+      this.logEvent(`**** Entering Screen Sharing Mode`)
 
-      this._screenShareVideoArea.nativeElement.srcObject = this._displayStreams[this._roomId]
-      this.logEvent(`---> Added DisplayStream to screenshare video area`)
+      this._displayStreams[id] = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+      this.logEvent(`---> Display media has been set`)
 
-      // this._addTracksToConnection(this._displayStreams[this._roomId])
-      
-      this._screenShareContainer.nativeElement.style.display = 'none'
+      this._switchTracks(this._displayStreams[id], id, "video")
+      this._addTracksToConnection(this._displayStreams[id], id)
 
-      this.isDashboardHidden = true
+      this.isSharingScreen = true
 
     } catch (error) {
       this._handleGetDisplayMediaError(error)
     }
   }
 
-  private _configureAudioContext(): void {
-    const context: AudioContext = new AudioContext()
-    const sineWave: OscillatorNode = context.createOscillator()
-    const gainNode: GainNode = context.createGain()
-
-    sineWave.connect(gainNode)
-    gainNode.connect(context.destination)
-    sineWave.start(0)
-
-    gainNode.gain.value = 0.9
+  private _switchTracks(stream: MediaStream, id: string, mode: string): void {
+    this._connections[id].getSenders().forEach((sender: RTCRtpSender) => {
+      if (sender.track.kind === mode) {
+        this._connections[id].removeTrack(sender)
+      }
+    })
   }
 
   private _addTracksToConnection(stream: MediaStream, id: string): void {
-    // RTCPeerConnection ontrack event fired when addTrack() is called
     stream.getTracks().forEach((track: MediaStreamTrack) => {
       this._connections[id].addTrack(track, stream)
       this.logEvent(`---> Added track: ${track.label} to connection`)
@@ -704,26 +690,24 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
   private _handleDataChannelEvent(id: string, event: RTCDataChannelEvent) {
     this.logEvent(`---> Data Channel Initiated on ${this.oppositeUserType}`)
-    this._dataChannels[id] = event.channel
-    this._dataChannels[id].onmessage = this.handleDataChannelMessage.bind(this, id)
-
-    this._dataChannels[id].onopen = this.handleReceiveChannelStatusChange.bind(this, id)
-    this._dataChannels[id].onclose = this.handleReceiveChannelStatusChange.bind(this, id)
+    this._dataChannels[id]            = event.channel
+    this._dataChannels[id].onmessage  = this._handleDataChannelMessage           .bind(this, id)
+    this._dataChannels[id].onopen     = this._handleDataChannelStatusChange     .bind(this, id)
+    this._dataChannels[id].onclose    = this._handleDataChannelStatusChange     .bind(this, id)
   }
 
-  private handleReceiveChannelStatusChange(id: string, event: Event) {
+  private _handleDataChannelStatusChange(id: string, event: Event) {
     if (this._dataChannels[id]) {
-      this.logEvent("Data channel's status has changed to " + this._dataChannels[id].readyState)
+      this.logEvent(`Data channel's status has changed to ${this._dataChannels[id].readyState}`)
     }
   }
 
-  private handleDataChannelMessage(id: string, event: MessageEvent) {
-    this.logEvent(`*** DataChannel Message Received: ${event.data}`)
+  private _handleDataChannelMessage(id: string, event: MessageEvent) {
+    this.logEvent(`**** DataChannel Message Received: ${event.data}`)
     const message = JSON.parse(event.data)
     this._toastrService.info(`New Message from ${message.sender} (${message.userType})`)
-
     const index: number = message.messageThreadIndex
-    // add the user to the list of tabs
+
     if (this.tabs.length !== this.users.length) {
       this.tabs.push(this.users[index])
     }
@@ -739,7 +723,6 @@ export class MeetingComponent implements OnInit, OnDestroy {
       this.messages.push([message])
     }
 
-    // this.messages.push([ message ])
     this.selectedUser.setValue(index)
     this.isMessageTargetSelected = true
     this._cdr.detectChanges()
@@ -748,21 +731,13 @@ export class MeetingComponent implements OnInit, OnDestroy {
   private _handleDataChannelOnOpenEvent(id: string) {
     if (this._dataChannels[id].readyState === 'open') {
       this.logEvent("Data Channel open")
-      this._dataChannels[id].onmessage = this.handleDataChannelMessage.bind(this, id)
+      this._dataChannels[id].onmessage = this._handleDataChannelMessage.bind(this, id)
     }
   }
 
-  public alignMessage(type: string): string {
-    return type === this.oppositeUserType ? 'flex-start' : 'flex-end'
-  }
-
-  public setBackgroundColor(type: string): string {
-    return type === this.oppositeUserType ? 'rgba(16, 160, 16, 0.92)' : 'rgba(71, 139, 213, 0.988)' // greeen : blue (respectively)
-  }
-
-  public sendMessage(event: MouseEvent): void {
-
-    const index = this.users.findIndex((user: IPayload) => user.clientId === this.selectedDataChannelId)
+  public sendMessage(): void {
+    const id = this.selectedDataChannelId
+    const index = this.users.findIndex((user: IPayload) => user.clientId === id)
 
     const content = {
       sender: this.member,
@@ -770,7 +745,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
       contentType: 'message',
       userType: this.type,
       timestamp: new Date(),
-      clientId: this.selectedDataChannelId,
+      clientId: id,
       messageThreadIndex: index
     }
 
@@ -782,103 +757,28 @@ export class MeetingComponent implements OnInit, OnDestroy {
     }
 
     this.messengerForm.controls['Message'].setValue("")
-
-    this._dataChannels[this.selectedDataChannelId].send(JSON.stringify(content))
-    this.logEvent(`*** DataChannel message sent: ${JSON.stringify(content)}`)
-  }
-
-  public sendFile(changeEvent: any): void {
-
-    if (!changeEvent.target.files) {
-      return
-    }
-
-    const file: File = changeEvent.target.files[0]
-    const chunk = 16384
-    const index = this.users.findIndex((user: IPayload) => user.clientId === this.selectedDataChannelId)
-
-
-    const message = {
-      sender: this.member,
-      body: "Download file",
-      filename: file.name,
-      filesize: file.size,
-      contentType: 'file',
-      userType: this.type,
-      timestamp: new Date()
-    }
-
-    this.messages[index].push(message)
-    
-    const payload = JSON.stringify(message) 
-
-    this._dataChannels[this.selectedDataChannelId].send(payload)
-
-    this._meetingService.signal('files', {
-      meetingId: this._meetingID,
-      member: this.member,
-      filename: file.name,
-      filesize: file.size,
-      isUpload: true,
-      data: payload,
-      userType: this.type
-    })
-    
-    const sliceFile = (offset: any) => {
-
-      const reader = new FileReader()
-
-      reader.onload = () => {
-        return (event: any) => {
-
-          this._dataChannels[this._roomId].send(event.target.result)
-
-          if (file.size > (offset + event.target.result.byteLength)) {
-            setTimeout(sliceFile, 0, (offset + chunk))
-          }
-
-          // set file upload progress here
-        }
-      }
-
-      const slice = file.slice(offset, (offset + chunk))
-      reader.readAsArrayBuffer(slice)
-    }
-    sliceFile(0)
-    // this.fileTransfer = false
+    this._dataChannels[id].send(JSON.stringify(content))
+    this.logEvent(`**** DataChannel message sent: ${JSON.stringify(content)}`)
   }
 
   private _handleGetUserMediaError(error: Error) {
     this._logError(error)
     switch (error.name) {
       case "NotFoundError":
-        alert("Unable to open your call because no camera and/or microphone" +
-          "were found.")
+        alert(`${error.name}: Unable to open your call because no camera and/or microphone were found.`)
         break
       case "SecurityError":
       case "PermissionDeniedError":
-        // Do nothing this is the same as the user canceling the call.
+        alert(`${error.name}: Permission denied while trying to get the users media`)
         break
       default:
-        alert("Error opening your camera and/or microphone: " + error.message)
+        alert(`Error opening your camera and/or microphone: ${error.message}`)
         break
     }
   }
 
   private _handleGetDisplayMediaError(error: Error): void {
-    switch (error.name) {
-      case "NotFoundError":
-      case "AbortError":
-      case "InvalidStateError":
-      case "NotAllowedError":
-      case "NotFoundError":
-      case "NotReadableError":
-      case "NotReadableError":
-      case "OverconstrainedError":
-      case "TypeError":
-        this._logError(error)
-        break
-    }
+    this._logError(error)
   }
 
   public logEvent(text: string): void {
@@ -895,16 +795,10 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this._logError(`Error ${message.name}: ${message.message}`)
   }
 
-  private _logInfoEvent(message: string): void {
-    const time = new Date()
-    console.info("[" + time.toLocaleTimeString() + "] " + message)
-  }
-
   ngOnDestroy() {
     this.destroy$.next(false)
     this.destroy$.unsubscribe()
     this._displayControls$.next(null)
     this._displayControls$.unsubscribe()
   }
-
 }

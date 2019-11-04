@@ -4,23 +4,23 @@ import { MainComponent } from './components/main/main.component';
 import { MainRouterModule } from './main.router.module';
 import { SharedModule } from '@/shared/shared.module';
 import { StoreModule } from '@ngrx/store';
-import { MeetingReducer } from './store/reducers/meeting.reducer';
+
 import { EffectsModule } from '@ngrx/effects';
 import { MeetingEffects } from './store/effects/meeting.effects';
-import { MeetingComponent } from '../meeting/components/meeting/meeting.component';
 import { MeetingToolComponent } from './components/meeting-tool/meeting-tool.component';
+import { MeetingMap } from '@/reducers';
+
 
 @NgModule({
     declarations: [
         MainComponent,
-        // MeetingComponent,
         MeetingToolComponent
     ],
     imports: [
-        CommonModule, 
-        MainRouterModule, 
+        CommonModule,
+        MainRouterModule,
         SharedModule,
-        StoreModule.forFeature('Meetings', MeetingReducer),
+        StoreModule.forFeature('Meetings', MeetingMap),
         EffectsModule.forFeature([MeetingEffects]),
     ],
     exports: [],

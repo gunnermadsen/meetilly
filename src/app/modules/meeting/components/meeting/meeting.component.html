@@ -16,7 +16,7 @@
 
     <mat-sidenav-container class="sidenav-container">
 
-        <mat-sidenav #snav [mode]="'side'" [position]="'end'" [opened]="true">
+        <mat-sidenav #snav [mode]="'side'" [position]="'end'" [opened]="false">
             <div class="message-container">
                 <div class="message-title">
                     <!-- <h3>Start a conversation</h3> -->
@@ -29,44 +29,43 @@
                             </mat-option>
                         </mat-select>
                     </mat-form-field>
-                    <div class="message-body">
-                        <mat-tab-group *ngIf="isMessageTargetSelected" [selectedIndex]="selectedUser.value" (selectedTabChanged)="setCurrentClientId($event)" > <!-- mat-stretch-tabs  (selectedIndexChange)="selected.setValue($event)" -->
-                            <mat-tab *ngFor="let tab of tabs; index as i">
-                                <ng-template mat-tab-label>
-                                    <div class="member-tab"> 
-                                        <p class="tab-title">{{ tab.member }}</p>
-                                        <button mat-icon-button class="tab-label" (click)="closeTab($event, i)"><mat-icon>close</mat-icon></button>
-                                    </div>
-                                </ng-template>
-                                <div class="message-body">
-                                    <div class="header">
-                                        <!-- Display a weekday and time when the conversation was started -->
-                                        <!-- <mat-divider *ngIf="messages.length"> {{ messages[0].timestamp | date : 'EEE, h' }} </mat-divider> -->
-                                    </div>
-                                    <div class="message" *ngFor="let message of messages[i]; index as j"
-                                        [ngStyle]="{ 'align-self': alignMessage(message.userType) }"
-                                        [style.background-color]="setBackgroundColor(message.userType)">
-                                
-                                        <div [ngSwitch]="message.contentType">
-                                            <div *ngSwitchCase="'file'">
-                                                <a href="#">{{ message.filename }}</a>
-                                            </div>
-                                            <div *ngSwitchCase="'message'">
-                                                {{ message.body }}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <!-- <button mat-raised-button class="example-delete-tab-button" [disabled]="tabs.length === 1"
-                                    (click)="removeTab(index)">
-                                    Delete Tab
-                                </button> -->
-                            </mat-tab>
-                        </mat-tab-group>
-                    </div>
                     <!-- <button mat-icon-button color="primary" class="control-message" (click)="snav.close()">
                         <mat-icon>close</mat-icon>
                     </button> -->
+                </div>
+
+                <div class="message-body">
+                    <mat-tab-group *ngIf="isMessageTargetSelected" [selectedIndex]="selectedUser.value" (selectedTabChanged)="setCurrentClientId($event)" > <!-- mat-stretch-tabs  (selectedIndexChange)="selected.setValue($event)" -->
+                        <mat-tab *ngFor="let tab of tabs; index as i">
+                            <ng-template mat-tab-label>
+                                <div class="member-tab"> 
+                                    <p class="tab-title">{{ tab.member }}</p>
+                                    <button mat-icon-button class="tab-label" (click)="closeTab($event, i)"><mat-icon>close</mat-icon></button>
+                                </div>
+                            </ng-template>
+                            <div class="messages">
+                                <div class="header">
+                                    <!-- Display a weekday and time when the conversation was started -->
+                                    <!-- <mat-divider *ngIf="messages.length"> {{ messages[0].timestamp | date : 'EEE, h' }} </mat-divider> -->
+                                </div>
+                                <div class="message" *ngFor="let message of messages[i]; index as j" meetingMessage [userType]="message.userType" [oppositeUserType]="oppositeUserType">
+                            
+                                    <div [ngSwitch]="message.contentType">
+                                        <div *ngSwitchCase="'file'">
+                                            <a href="#">{{ message.filename }}</a>
+                                        </div>
+                                        <div *ngSwitchCase="'message'">
+                                            {{ message.body }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- <button mat-raised-button class="example-delete-tab-button" [disabled]="tabs.length === 1"
+                                (click)="removeTab(index)">
+                                Delete Tab
+                            </button> -->
+                        </mat-tab>
+                    </mat-tab-group>
                 </div>
                 
                 <div class="message-input">
@@ -98,10 +97,13 @@
             </div>
             <div class="meeting-dashboard" *ngIf="!isDashboardHidden">
                 <div class="dashboard-title">
-                    <button mat-raised-button color="primary" (click)="enterVideoConferenceMode($event)">Videoconference</button>
-                    <button mat-raised-button color="primary" (click)="enterScreenSharingMode($event)">Screensharing</button>
+                    <button mat-raised-button color="primary" (click)="configureVideoConferenceMode($event)">Videoconference</button>
+                    <button mat-raised-button color="primary" (click)="configureScreenSharingMode($event)">Screensharing</button>
                 </div>
 
+                <div class="screen-share-container" #screenShareContainer>
+                    <video class="screen-share-video" #screenShareVideoArea autoplay></video>
+                </div>
             </div>
 
             <div class="video-container" #videoContainer>
@@ -120,6 +122,12 @@
                         </div>
                     </div>
                 </div>
+                <div class="screenshare-controls" *ngIf="displayControls$ | async">
+                    <button mat-fab color="primary" class="screenshare-control" (click)="configureScreenSharingMode($event)">
+                        <mat-icon *ngIf="!isSharingScreen">screen_share</mat-icon>
+                        <mat-icon *ngIf="isSharingScreen">stop_screen_share</mat-icon>
+                    </button>
+                </div>
                 <div id="videoconference-controls" class="video-controls" *ngIf="displayControls$ | async">
                     <button mat-fab color="primary" class="control-message" (click)="snav.toggle()">
                         <mat-icon>chat_bubble_outline</mat-icon>
@@ -132,18 +140,44 @@
                         <mat-icon *ngIf="!isPaused">videocam</mat-icon>
                         <mat-icon *ngIf="isPaused">videocam_off</mat-icon>
                     </button>
-                    <button mat-fab color="warm">
+                    <button id="hardware-menu" mat-fab color="warm" [matMenuTriggerFor]="menu">
                         <mat-icon>more_horiz</mat-icon>
                     </button>
                     <button mat-fab color="warm" class="control-close" (click)="endVideoConference($event)">
                         <mat-icon>call_end</mat-icon>
-                    </button>
+                    </button> 
                 </div>
-            </div>
-
-            <div class="screen-share-container" #screenShareContainer>
-                <video class="screen-share-video" #screenShareVideoArea></video>
             </div>
         </mat-sidenav-content>
     </mat-sidenav-container>
 </div>
+
+
+<mat-menu #menu="matMenu">
+    <button mat-menu-item [matMenuTriggerFor]="cameraMenu">
+        Change Camera
+    </button>
+    <button mat-menu-item [matMenuTriggerFor]="microphoneMenu">
+        Change Microphone
+    </button>
+    <button mat-menu-item [matMenuTriggerFor]="speakerMenu">
+        Change Speaker
+    </button>
+</mat-menu>
+<mat-menu #cameraMenu="matMenu">
+    <button mat-menu-item *ngFor="let camera of cameraList" (click)="changeVideo(camera.deviceId, camera.kind)">
+        {{ camera.label }}
+    </button>
+</mat-menu>
+<mat-menu #microphoneMenu="matMenu">
+    <button mat-menu-item *ngFor="let microphone of microphoneList"
+        (click)="changeAudio(microphone.deviceId, microphone.kind)">
+        {{ microphone.label }}
+        <!-- <span *ngIf="microphone.deviceId != 'default'">{{ microphone.label }}</span> -->
+    </button>
+</mat-menu>
+<mat-menu #speakerMenu="matMenu">
+    <button mat-menu-item *ngFor="let speaker of speakerList" (click)="changeAudio(speaker.deviceId, speaker.kind)">
+        {{ speaker.label }}
+    </button>
+</mat-menu>

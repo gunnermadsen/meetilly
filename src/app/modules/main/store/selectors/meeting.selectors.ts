@@ -1,12 +1,20 @@
 import { createFeatureSelector, createSelector, MemoizedSelector } from '@ngrx/store'
 import { IMeeting } from '@/shared/models/meeting.model'
-export const selectMeetingState = createFeatureSelector<IMeeting[]>('Meetings')
+import { AppState } from '../../../../reducers'
+export const selectMeetingState = createFeatureSelector<AppState>('Meetings')
 
 const getEntities = (entities: IMeeting[]): IMeeting[] => Object.values(entities)
 
 export const selectMeetings: MemoizedSelector<object, any> = createSelector(
     selectMeetingState,
-    (meetings: any): IMeeting[] => {
-        return getEntities(meetings.entities)
+    (map: any): IMeeting[] => {
+        return getEntities(map.Meetings.entities)
+    }
+)
+
+export const selectMeetingViewState: MemoizedSelector<object, any> = createSelector(
+    selectMeetingState,
+    (map: any): boolean => {
+        return map.MeetingSettings.meetingViewState
     }
 )

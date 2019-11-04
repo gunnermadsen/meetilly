@@ -18,7 +18,8 @@ import { MaterialModule } from './material.module';
             timeOut: 4000,
             positionClass: 'toast-top-left'
         }),
-        RouterModule
+        RouterModule,
+        
     ],
     exports: [
         MaterialModule,

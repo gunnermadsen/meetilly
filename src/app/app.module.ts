@@ -11,8 +11,11 @@ import { SharedModule } from '@/shared/shared.module';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { SocketIoModule, SocketIoConfig } from 'ngx-socket-io';
+import { StoreModule } from '@ngrx/store';
+import { MeetingMap } from './reducers';
+import { MeetingSettingsReducer } from './modules/main/store/reducers/meeting-settings.reducer';
 
-export const config: SocketIoConfig = {
+const config: SocketIoConfig = {
   url: 'http://localhost:3434',
   options: {
     transports: [ 'websocket' ],
@@ -35,9 +38,11 @@ export const config: SocketIoConfig = {
     AppRouterModule,
     BrowserAnimationsModule,
     CoreModule,
-    SharedModule,
     HomeModule,
-    SocketIoModule.forRoot(config)
+    SocketIoModule.forRoot(config),
+    SharedModule,
+
+    StoreModule.forFeature('Meetings', MeetingMap),
 
   ],
   providers: [],
