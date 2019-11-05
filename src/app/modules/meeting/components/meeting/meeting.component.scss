@@ -72,16 +72,23 @@ h2 {
 
 
 
-
-
 // Meeting Dashboard Styles
 .dashboard-title {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+
   margin: 10px;
+
+  h3 {
+    margin-bottom: 0
+  }
 }
 
-
-
-
+.mat-divider {
+  margin: 0px 10px;
+}
 
 
 
@@ -94,26 +101,43 @@ h2 {
 
 
 
-
-
-
-
 // Video Conference Styles
+
 .video-controls {
   display: flex;
-  flex-direction: row;
   justify-content: space-between;
   align-items: center;
-
-  width: 380px;
-  // background-color: rgb(201, 197, 197);
-  // margin: 10px 10px 3px 10px;
   position: absolute;
   z-index: 14;
-  bottom: 100px;
-  left: 50%;
-  margin-left: -190px;
-  
+  // background-color: rgb(201, 197, 197);
+  // margin: 10px 10px 3px 10px;
+}
+
+@media only screen and (min-width: 531px) {
+
+  .video-controls {
+    flex-direction: row;
+    width: 400px;
+    height: 56px;
+
+    bottom: 100px;
+    left: 50%;
+    margin-left: -200px;
+    
+  }
+}
+
+
+@media only screen and (max-width: 530px) {
+  .video-controls {
+    flex-direction: column;
+    height: 400px;
+    width: 56px;
+    bottom: 10px;
+    left: 10px;
+    margin-left: 0;
+    
+  }
 }
 
 .control-close {
@@ -136,6 +160,17 @@ h2 {
   position: absolute;
   
   background: #181818;
+}
+
+.loading-video {
+  position: absolute;
+  width: 350px;
+  height: 350px;
+  background-color: lightgray;
+  top: 50%;
+  left: 50%;
+  margin-left: -175px;
+  z-index: 20;
 }
 
 
@@ -309,4 +344,16 @@ textarea {
   position: absolute;
   top: 10px;
   left: 10px;
+}
+
+
+// Users Table Styles
+
+.table-container {
+  width: 100%;
+  padding: 10px;
+}
+
+table {
+  width: 100%;
 }

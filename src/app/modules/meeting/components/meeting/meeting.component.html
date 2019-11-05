@@ -1,15 +1,4 @@
-<div class="meeting-progress-container" *ngIf="!isStreamingReady">
-    <!-- Loading indicator to show while waiting for other meeting members to join -->
-
-    <div class="meeting-progress">
-        <div class="meeting-progress-title">
-            <h2>Waiting for others to join the meeting</h2>
-        </div>
-        <div class="meeting-progress-bar">
-            <mat-progress-bar mode="indeterminate"></mat-progress-bar>
-        </div>
-    </div>
-</div>
+<ng-container *ngTemplateOutlet="loading; context: { isReady: isStreamingReady }"></ng-container>
 
 <div class="meeting-container" *ngIf="isStreamingReady">
     <!-- <mat-divider></mat-divider> -->
@@ -29,9 +18,6 @@
                             </mat-option>
                         </mat-select>
                     </mat-form-field>
-                    <!-- <button mat-icon-button color="primary" class="control-message" (click)="snav.close()">
-                        <mat-icon>close</mat-icon>
-                    </button> -->
                 </div>
 
                 <div class="message-body">
@@ -97,12 +83,33 @@
             </div>
             <div class="meeting-dashboard" *ngIf="!isDashboardHidden">
                 <div class="dashboard-title">
-                    <button mat-raised-button color="primary" (click)="configureVideoConferenceMode($event)">Videoconference</button>
-                    <button mat-raised-button color="primary" (click)="configureScreenSharingMode($event)">Screensharing</button>
+                    <h3>Meeting Participants</h3>
+                    <button mat-raised-button color="primary" (click)="configureVideoConferenceMode($event)">Begin Meeting</button>
                 </div>
+
+                <mat-divider></mat-divider>
 
                 <div class="screen-share-container" #screenShareContainer>
                     <video class="screen-share-video" #screenShareVideoArea autoplay></video>
+                </div>
+                <div class="table-container">
+                    <table mat-table [dataSource]="(users$ | async)" class="mat-elevation-z1">
+                    
+                        <!-- Name Column -->
+                        <ng-container matColumnDef="name">
+                            <th mat-header-cell *matHeaderCellDef> Name </th>
+                            <td mat-cell *matCellDef="let user"> {{ user.member }} </td>
+                        </ng-container>
+                    
+                        <!-- User Type Column -->
+                        <ng-container matColumnDef="type">
+                            <th mat-header-cell *matHeaderCellDef> Type </th>
+                            <td mat-cell *matCellDef="let user"> {{ user.userType }} </td>
+                        </ng-container>
+                    
+                        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+                        <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+                    </table>
                 </div>
             </div>
 
@@ -110,6 +117,9 @@
                 <div class="video-wrap">
                     <div class="main-video">
                         <video autoplay #mainVideoArea></video>
+                        <div class="loading-video" *ngIf="!isStreamingReady">
+                            <ng-container *ngTemplateOutlet="loading; context: { isReady: isStreamingReady }"></ng-container>
+                        </div>
                     </div>
                     <div class="small-video-bar">
                         <div class="small-video-remote-container" *ngIf="webcamStreamsLength > 1">
@@ -123,27 +133,33 @@
                     </div>
                 </div>
                 <div class="screenshare-controls" *ngIf="displayControls$ | async">
-                    <button mat-fab color="primary" class="screenshare-control" (click)="configureScreenSharingMode($event)">
+                    <button mat-fab matTooltip="Share you screen" color="primary" class="screenshare-control" (click)="configureScreenSharingMode($event)">
                         <mat-icon *ngIf="!isSharingScreen">screen_share</mat-icon>
                         <mat-icon *ngIf="isSharingScreen">stop_screen_share</mat-icon>
                     </button>
                 </div>
                 <div id="videoconference-controls" class="video-controls" *ngIf="displayControls$ | async">
-                    <button mat-fab color="primary" class="control-message" (click)="snav.toggle()">
+                    <button mat-fab matTooltip="Switch to a voice call" color="accent" class="control-phone" *ngIf="!isVoice" (click)="configureCallType('audio')">
+                        <mat-icon>phone</mat-icon>
+                    </button>
+                    <button mat-fab matTooltip="Switch to a video call" color="accent" class="control-phone" *ngIf="isVoice" (click)="configureCallType('video')">
+                        <mat-icon>switch_video</mat-icon>
+                    </button>
+                    <button mat-fab matTooltip="Show the messenger" color="primary" class="control-message" (click)="snav.toggle()">
                         <mat-icon>chat_bubble_outline</mat-icon>
                     </button>
-                    <button mat-fab color="warm" class="control-microphone" (click)="muteMicrophone($event)">
-                        <mat-icon *ngIf="!isMuted">mic</mat-icon>
-                        <mat-icon *ngIf="isMuted">mic_off</mat-icon>
-                    </button>
-                    <button mat-fab color="warm" class="control-microphone" (click)="disableVideoCamera($event)">
+                    <button mat-fab matTooltip="Disable video" color="warm" class="control-video" (click)="disableVideoCamera($event)">
                         <mat-icon *ngIf="!isPaused">videocam</mat-icon>
                         <mat-icon *ngIf="isPaused">videocam_off</mat-icon>
                     </button>
-                    <button id="hardware-menu" mat-fab color="warm" [matMenuTriggerFor]="menu">
+                    <button mat-fab matTooltip="Mute the microphone" color="warm" class="control-microphone" (click)="muteMicrophone($event)">
+                        <mat-icon *ngIf="!isMuted">mic</mat-icon>
+                        <mat-icon *ngIf="isMuted">mic_off</mat-icon>
+                    </button>
+                    <button id="hardware-menu" mat-fab matTooltip="Additional options" color="warm" [matMenuTriggerFor]="menu">
                         <mat-icon>more_horiz</mat-icon>
                     </button>
-                    <button mat-fab color="warm" class="control-close" (click)="endVideoConference($event)">
+                    <button mat-fab matTooltip="End the call" color="warm" class="control-close" (click)="endVideoConference($event)">
                         <mat-icon>call_end</mat-icon>
                     </button> 
                 </div>
@@ -163,6 +179,9 @@
     <button mat-menu-item [matMenuTriggerFor]="speakerMenu">
         Change Speaker
     </button>
+    <button mat-menu-item (click)="getDeviceList()">
+        <mat-icon>refresh</mat-icon> Refresh
+    </button>
 </mat-menu>
 <mat-menu #cameraMenu="matMenu">
     <button mat-menu-item *ngFor="let camera of cameraList" (click)="changeVideo(camera.deviceId, camera.kind)">
@@ -181,3 +200,20 @@
         {{ speaker.label }}
     </button>
 </mat-menu>
+
+
+
+<ng-template #loading let-stream="isReady">
+    <div class="meeting-progress-container" *ngIf="!stream">
+        <!-- Loading indicator to show while waiting for other meeting members to join -->
+    
+        <div class="meeting-progress">
+            <div class="meeting-progress-title">
+                <h2>Waiting for others to join the meeting</h2>
+            </div>
+            <div class="meeting-progress-bar">
+                <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+            </div>
+        </div>
+    </div>
+</ng-template>

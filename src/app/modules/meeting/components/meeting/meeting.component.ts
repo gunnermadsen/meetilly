@@ -2,8 +2,8 @@ import { Component, OnInit, ViewChild, ElementRef, OnDestroy, ChangeDetectorRef,
 import { ActivatedRoute } from '@angular/router'
 import { FormGroup, FormControl } from '@angular/forms'
 
-import { takeUntil, map, tap, debounceTime, skipWhile } from 'rxjs/operators'
-import { Subject, merge, Observable, fromEvent, BehaviorSubject, combineLatest } from 'rxjs'
+import { takeUntil, map, tap, debounceTime, skipWhile, switchMap, catchError } from 'rxjs/operators'
+import { Subject, merge, Observable, fromEvent, BehaviorSubject, combineLatest, from, of, throwError } from 'rxjs'
 import { sizeConstraints } from './constraints'
 import adapter from 'webrtc-adapter'
 import { ToastrService } from 'ngx-toastr'
@@ -11,11 +11,12 @@ import * as md5 from 'md5'
 
 import { MeetingService } from '@/modules/main/services/meeting.service'
 import { IPayload } from '@/modules/main/models/payload.model'
-import { MatSelectChange } from '@angular/material'
+import { MatSelectChange, MatTableDataSource } from '@angular/material'
 import { DataChannelConnections, WebcamStreams, DisplayStreams, PeerConnections } from '@/modules/meeting/models/meeting.model'
 import { Store } from '@ngrx/store'
 import { AppState } from '@/reducers'
 import { setMeetingViewState } from '@/modules/main/store/actions/meeting.actions'
+import { IUsers } from '@/modules/meeting/models/users.model'
 
 @Component({
   selector: 'app-meeting',
@@ -45,24 +46,29 @@ export class MeetingComponent implements OnInit, OnDestroy {
   private _roomId: string
   public member: string = null
   public meetingData: any = null
+  public dataSource: MatTableDataSource<any>
+  public displayedColumns: string[] = ['name', 'type'];
   public type: string = null
   private destroy$: Subject<boolean> = new Subject<boolean>()
   private closeConference$: Subject<boolean> = new Subject<boolean>()
   private _displayControls$: BehaviorSubject<boolean> = new BehaviorSubject<boolean>(true)
   public displayControls$: Observable<boolean> = this._displayControls$.asObservable()
+  private _users$: BehaviorSubject<IUsers[]> = new BehaviorSubject<IUsers[]>([])
+  public users$: Observable<IUsers[]> = this._users$.asObservable()
   public oppositeUserType: string = null
   public messages: any[] = []
-  public users: IPayload[] = []
+  public users: IUsers[] = []
   public tabs: IPayload[] = []
   public selectedDataChannelId: string
   public selectedConnectionId: string
   public isStreamingReady: boolean = false
-  public isVideoConfereneMode: boolean = false
+  public isVideoConferenceMode: boolean = false
   public isMuted: boolean = false
   public isDashboardHidden: boolean = false
   public isPaused: boolean = false
   public isSharingScreen: boolean = false
   public isMessageTargetSelected: boolean = false
+  public isVoice: boolean = false
 
   public get webcamStreamsLength() {
     const value = Object.values(this._webcamStreams).length
@@ -79,6 +85,8 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this.type = this._route.snapshot.queryParams.mode
 
     this.meetingData = this._route.snapshot.data.result[0]
+    this.dataSource = new MatTableDataSource(this.meetingData)
+
     this.oppositeUserType = this.type === 'host' ? 'guest' : 'host'
     
     this.messengerForm = new FormGroup({
@@ -240,21 +248,20 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this._mainVideoArea.nativeElement.srcObject = event.streams[0]
   }
 
-  private _handleICEConnectionStateChangeEvent(id: string) {
+  private _handleICEConnectionStateChangeEvent(id: string): void {
     
     const state = this._connections[id].iceConnectionState
     this.logEvent(`**** ICE connection state changed to: ${state}`)
 
     switch (state) {
       case "closed":
-        this.endVideoConference(state)
+        this.endVideoConference()
         this.closeMeeting()
         break
       case "failed":
       case "disconnected":
-        this.logEvent(`---> Peer connection has '${state}'. Attempting to reconnect to ${this.type}`)
-        this.endVideoConference(state)
-        this.closeMeeting()
+        this.isStreamingReady = false
+        this._restartConnection()
         break
     }
   }
@@ -413,7 +420,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
     }
   }
 
-  public endVideoConference(event: any) {
+  public endVideoConference() {
     this.logEvent("**** Ending the Video Conference")
     this.logEvent("--> Closing the MediaStream Tracks")
 
@@ -442,10 +449,37 @@ export class MeetingComponent implements OnInit, OnDestroy {
     }
   }
 
+  private async _restartConnection(): Promise<void> {
+    // for now a dedicated method is used for triggering connection restart
+    let retryCounter: number
+
+    const id = this.selectedConnectionId
+    try {
+      const offer = await this._connections[id].createOffer({ iceRestart: true })
+
+      await this._connections[id].setLocalDescription(offer)
+
+      this.isStreamingReady = true
+
+    } catch (error) {
+      // if we cant restart the connection, log the error and close the meeting
+      this._reportError(error)
+
+      // lets try three reconnection attempts
+      if (retryCounter <= 3) {
+        retryCounter++
+        this._restartConnection()
+      }
+
+      this.closeMeeting()
+      this.endVideoConference()
+    }
+  }
+
   private _resetMeetingRoom(id: string): void {
     if (this._smallVideoArea.nativeElement.srcObject) {
-      this._webcamStreams[id].getTracks().forEach((stream: MediaStreamTrack) => stream.stop())
-      // this._connections[id].getSenders().forEach((sender: RTCRtpSender) => this._connections[id].removeTrack(sender))
+      // this._webcamStreams[id].getTracks().forEach((stream: MediaStreamTrack) => stream.stop())
+      this._connections[id].getSenders().forEach((sender: RTCRtpSender) => this._connections[id].removeTrack(sender))
     }
 
     this._store$.dispatch(setMeetingViewState({ meetingViewState: false }))
@@ -454,8 +488,9 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this._smallVideoArea.nativeElement.srcObject = null
 
     this._videoContainer.nativeElement.style.display = 'none'
-    this.isVideoConfereneMode = !this.isVideoConfereneMode
+    // this.isVideoConferenceMode = !this.isVideoConferenceMode
     this.isDashboardHidden = false
+    this.isSharingScreen = false
   }
 
   public setSelectedUser(event: MatSelectChange): void {
@@ -492,6 +527,9 @@ export class MeetingComponent implements OnInit, OnDestroy {
         this.logEvent(`**** Member: ${payload.member}: (${payload.userType}) has been added`)
       }
     })
+    this.logEvent("Adding new user to behaviorsubject")
+    this._users$.next(this.users)
+    console.log(this._users$.value)
   }
 
   private _hangupAndNotify(payload: IPayload): void {
@@ -564,7 +602,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
     }
   }
 
-  private async _getDeviceList(): Promise<void> {
+  public async getDeviceList(): Promise<void> {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices()
       this.cameraList = devices.filter((device: MediaDeviceInfo) => device.kind === "videoinput" && device.deviceId !== "default")
@@ -596,41 +634,38 @@ export class MeetingComponent implements OnInit, OnDestroy {
       fromEvent(document, 'mousemove').pipe(
         skipWhile(() => this._displayControls$.value),
         tap(() => this._displayControls$.next(true)),
-        debounceTime(1500),
+        debounceTime(3000),
         tap(() => this._displayControls$.next(false)),
       ),
       fromEvent(document, 'mouseleave').pipe(
         tap(() => this._displayControls$.next(false))
       )
-    ]).pipe(takeUntil(this.closeConference$)).subscribe()
+    ])
+    .pipe(
+      takeUntil(this.closeConference$), 
+    ).subscribe((event: any) => {
+      console.log(event)
+    })
   }
 
   public async configureVideoConferenceMode(): Promise<void> {
     this.logEvent(`**** Entering Video Conference mode`)
 
     this.isDashboardHidden = true
-    // for now, set the first id in the list of ids to the main id
+
     this.selectedConnectionId = this._clientIds[0]
     const id = this.selectedConnectionId
+
     this._videoContainer.nativeElement.style.display = 'inline-block'
-  
-    this._getDeviceList()
+    this.getDeviceList()
 
     this._store$.dispatch(setMeetingViewState({ meetingViewState: true }))
-
-    const constraints = {
-      audio: true,
-      video: sizeConstraints
-    }
     
     try {
-      this._webcamStreams[id] = await navigator.mediaDevices.getUserMedia(constraints)
+      this._webcamStreams[id] = await navigator.mediaDevices.getUserMedia({ audio: true, video: sizeConstraints })
 
       this.logEvent(`---> Acquired user media for ${this.oppositeUserType}`)
-
       this._smallVideoArea.nativeElement.srcObject = this._webcamStreams[id]
-      this.selectedConnectionId = id
-      this.logEvent(`---> Added webcam stream to small video area element on ${this.oppositeUserType}`)
 
       this._addTracksToConnection(this._webcamStreams[id], id)
 
@@ -644,29 +679,38 @@ export class MeetingComponent implements OnInit, OnDestroy {
   public async configureScreenSharingMode(): Promise<void> {
     
     const id = this.selectedConnectionId
+    this.logEvent(`**** Entering Screen Sharing Mode`)
     
+    if (this.isSharingScreen) {
+      this._switchTracks(this._webcamStreams[id], id, "video")
+      this._displayStreams[id].getTracks().forEach((track: MediaStreamTrack) => track.stop())
+      this.isSharingScreen = false
+      return
+    }
+
     try {
-      if (this.isSharingScreen) {
-        this._switchTracks(this._webcamStreams[id], id, "video")
-        this._displayStreams[id].getTracks().forEach((track: MediaStreamTrack) => track.stop())
-        const offer = await this._connections[id].createOffer({ iceRestart: true })
-        
-        await this._connections[id].setLocalDescription(offer)
-        this._addTracksToConnection(this._webcamStreams[id], id)
-
-        this.isSharingScreen = false
-        return
-      }
-
-      this.logEvent(`**** Entering Screen Sharing Mode`)
-
       this._displayStreams[id] = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
       this.logEvent(`---> Display media has been set`)
 
       this._switchTracks(this._displayStreams[id], id, "video")
-      this._addTracksToConnection(this._displayStreams[id], id)
-
       this.isSharingScreen = true
+    } catch (error) {
+      this._handleGetDisplayMediaError(error)
+    }
+  }
+
+  public async configureCallType(type: string): Promise<void> {
+
+    this.isVoice = !this.isVoice
+
+    return
+
+    const id = this.selectedConnectionId
+
+    try {
+      this._displayStreams[id] = await navigator.mediaDevices.getUserMedia({ video: false, audio: false })
+
+      this._switchTracks(this._displayStreams[id], id, "audio")
 
     } catch (error) {
       this._handleGetDisplayMediaError(error)
@@ -674,11 +718,9 @@ export class MeetingComponent implements OnInit, OnDestroy {
   }
 
   private _switchTracks(stream: MediaStream, id: string, mode: string): void {
-    this._connections[id].getSenders().forEach((sender: RTCRtpSender) => {
-      if (sender.track.kind === mode) {
-        this._connections[id].removeTrack(sender)
-      }
-    })
+    const videoTrack = stream.getVideoTracks()
+    const sender = this._connections[id].getSenders().find((sender: RTCRtpSender) => sender.track.kind === mode)
+    sender.replaceTrack(videoTrack[0])
   }
 
   private _addTracksToConnection(stream: MediaStream, id: string): void {
