@@ -33,13 +33,6 @@ h2 {
 
 
 
-
-
-
-
-
-
-
 // Meeting Indeterminate progres bar Styles
 .meeting-progress-container {
     display: flex;
@@ -356,4 +349,30 @@ textarea {
 
 table {
   width: 100%;
+}
+
+
+// Meeting Controls
+
+.hangup-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+}
+
+.meeting-clock {
+  position: absolute;
+  align-items: center;
+  justify-content: center;
+  height: 56px;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+}
+
+.clock-counter {
+  font-size: 20px;
+  color: white;
+  margin-bottom: 0;
 }

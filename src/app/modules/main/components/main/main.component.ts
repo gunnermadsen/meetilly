@@ -6,9 +6,11 @@ import { Store, select } from '@ngrx/store';
 import { AppState } from '@/reducers';
 
 import * as meetings from '@/modules/main/store/selectors/meeting.selectors'
-import { fetchMeetings } from '../../store/actions/meeting.actions';
+import { fetchMeetings } from '@/modules/main/store/actions/meeting.actions';
 import { isPlatformBrowser } from '@angular/common';
 import { FormGroup, FormControl } from '@angular/forms';
+
+import * as md5 from 'md5'
 
 @Component({
   selector: 'app-main',
@@ -58,7 +60,8 @@ export class MainComponent implements OnInit {
       queryParams: {
         mode: 'host',
         meetingId: id.toString(),
-        member: this._userName
+        member: this._userName,
+        // connectionId: md5(Math.floor(Math.random() * 8932839).toString())
       }
     }
 
@@ -72,7 +75,8 @@ export class MainComponent implements OnInit {
       queryParams: {
         mode: 'guest',
         meetingId: this.form.controls['MeetingNumber'].value,
-        member: this._userName
+        member: this._userName,
+        // connectionId: md5(Math.floor(Math.random() * 8932839).toString())
       }
     }
 
@@ -80,8 +84,8 @@ export class MainComponent implements OnInit {
     // this._openWindow('guest', code)
   }
 
-  private _openWindow(mode: string, code: string): void {
-    window.open(`/meeting?mode=${mode}&meetingId=${code}&member=${this._userName}`, "_blank", "width=1500, height=1000")
+  private _openWindow(mode: string, code: string, connectionId: string): void {
+    window.open(`/meeting?mode=${mode}&meetingId=${code}&member=${this._userName}&connectionId=${connectionId}`, "_blank", "width=1500, height=1000")
   }
 
 }

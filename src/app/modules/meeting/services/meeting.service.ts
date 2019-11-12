@@ -1,17 +1,17 @@
 import { Injectable } from '@angular/core';
 import { Socket } from 'ngx-socket-io';
-import { Observable, timer } from 'rxjs';
-import { IPayload } from '../models/payload.model';
-import { delay, distinct, retryWhen, delayWhen } from 'rxjs/operators';
+import { Observable } from 'rxjs';
+import { IPayload } from '../../main/models/payload.model';
+import { delay } from 'rxjs/operators';
 
 @Injectable({ providedIn: 'root' })
 export class MeetingService {
     private _signal$: Observable<any> = this._socket.fromEvent<any>('signal')
     private _ready$: Observable<any> = this._socket.fromEvent<any>('ready')
-    private _waiting$: Observable<any> = this._socket.fromEvent<any>('waiting')
+    private _standby$: Observable<any> = this._socket.fromEvent<any>('standby')
     private _closed$: Observable<any> = this._socket.fromEvent<any>('closed')
     private _exchange$: Observable<any> = this._socket.fromEvent<any>('exchange')
-    private _multi$: Observable<any> = this._socket.fromEvent<any>('multi')
+    private _timer$: Observable<any> = this._socket.fromEvent<any>('timer')
 
     public get signal$(): Observable<any> {
         return this._signal$
@@ -21,8 +21,8 @@ export class MeetingService {
         return this._ready$
     }
 
-    public get waiting$(): Observable<any> {
-        return this._waiting$.pipe(delay(3000))
+    public get standby$(): Observable<any> {
+        return this._standby$.pipe(delay(3000))
     }
 
     public get closed$(): Observable<any> {
@@ -33,8 +33,8 @@ export class MeetingService {
         return this._exchange$
     }
 
-    public get multi$(): Observable<any> {
-        return this._multi$
+    public get timer$(): Observable<any> {
+        return this._timer$
     }
 
     public get socket(): Socket {

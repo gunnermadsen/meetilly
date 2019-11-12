@@ -5,7 +5,8 @@ export interface IPayload {
     member?: string 
     mode?: string 
     data?: any
-    userType?: string
+    sender?: string
+    receiver?: string
     filename?: string
     filesize?: number
     isUpload?: boolean

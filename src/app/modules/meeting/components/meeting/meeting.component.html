@@ -55,12 +55,12 @@
                 </div>
                 
                 <div class="message-input">
-                    <form class="message-form" [formGroup]="messengerForm">
+                    <div class="message-form">
                         <mat-form-field appearance="outline">
                             <mat-label>Send a message</mat-label>
-                            <textarea formControlName="Message" matInput cdkTextareaAutosize #autosize="cdkTextareaAutosize" cdkAutosizeMinRows="1" cdkAutosizeMaxRows="10"></textarea>
+                            <textarea [formControl]="messageArea" matInput cdkTextareaAutosize #autosize="cdkTextareaAutosize" cdkAutosizeMinRows="1" cdkAutosizeMaxRows="10"></textarea>
                         </mat-form-field>
-                    </form>
+                    </div>
                     <button mat-mini-fab color="primary" (click)="sendMessage($event)"><mat-icon>arrow_upward</mat-icon></button>
                     <button mat-mini-fab color="accent" (click)="uploader.click()"><mat-icon>cloud_upload</mat-icon></button>
                     <input type="file" hidden (change)="sendFile($event)" #uploader>
@@ -73,12 +73,12 @@
                 <button mat-fab color="warm" class="control-message" [matMenuTriggerFor]="menu">
                     <mat-icon>people_outline</mat-icon>
                 </button>
-                <button mat-fab color="primary" class="control-message" (click)="snav.toggle()">
+                <button mat-fab color="primary"  class="control-message" (click)="snav.toggle()"> <!-- [formControl]="messageToggle" -->
                     <mat-icon>chat_bubble_outline</mat-icon>
                 </button>
             
                 <mat-menu #menu="matMenu" yPosition="above">
-                    <button mat-menu-item *ngFor="let user of users; index as i">{{ user.member }} ({{ user.userType }})</button>
+                    <button mat-menu-item *ngFor="let user of (users$ | async); index as i">{{ user.member }} ({{ user.sender }})</button>
                 </mat-menu>
             </div>
             <div class="meeting-dashboard" *ngIf="!isDashboardHidden">
@@ -93,7 +93,7 @@
                     <video class="screen-share-video" #screenShareVideoArea autoplay></video>
                 </div>
                 <div class="table-container">
-                    <table mat-table [dataSource]="(users$ | async)" class="mat-elevation-z1">
+                    <table mat-table [dataSource]="(users$ | async)" [trackBy]="trackByFn" class="mat-elevation-z1">
                     
                         <!-- Name Column -->
                         <ng-container matColumnDef="name">
@@ -104,9 +104,15 @@
                         <!-- User Type Column -->
                         <ng-container matColumnDef="type">
                             <th mat-header-cell *matHeaderCellDef> Type </th>
-                            <td mat-cell *matCellDef="let user"> {{ user.userType }} </td>
+                            <td mat-cell *matCellDef="let user"> {{ user.sender }} </td>
                         </ng-container>
-                    
+
+                        <!-- Client Id Column -->
+                        <ng-container matColumnDef="clientId">
+                            <th mat-header-cell *matHeaderCellDef> Client Id </th>
+                            <td mat-cell *matCellDef="let user"> {{ user.clientId }} </td>
+                        </ng-container>
+
                         <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
                         <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
                     </table>
@@ -133,11 +139,19 @@
                     </div>
                 </div>
                 <div class="screenshare-controls" *ngIf="displayControls$ | async">
-                    <button mat-fab matTooltip="Share you screen" color="primary" class="screenshare-control" (click)="configureScreenSharingMode($event)">
+                    <button mat-fab matTooltip="Share you screen" [matTooltipPosition]="'right'" color="primary" class="screenshare-control" (click)="configureScreenSharingMode($event)">
                         <mat-icon *ngIf="!isSharingScreen">screen_share</mat-icon>
                         <mat-icon *ngIf="isSharingScreen">stop_screen_share</mat-icon>
                     </button>
                 </div>
+                <div class="meeting-clock" [style.display]="(displayControls$ | async) ? 'flex' : 'none'">
+                    <p class="clock-counter">{{ (timeCounter$ | async) | date : 'HH:mm:ss' : 'UTC' }}</p>
+                </div>
+                <!-- <div class="hangup-controls" *ngIf="displayControls$ | async">
+                    <button mat-fab matTooltip="Close the meeting" color="warm" class="hangup-control" (click)="endVideoConference($event)">
+                        <mat-icon>close</mat-icon>
+                    </button>
+                </div> -->
                 <div id="videoconference-controls" class="video-controls" *ngIf="displayControls$ | async">
                     <button mat-fab matTooltip="Switch to a voice call" color="accent" class="control-phone" *ngIf="!isVoice" (click)="configureCallType('audio')">
                         <mat-icon>phone</mat-icon>

@@ -70,6 +70,7 @@
     "no-shadowed-variable": false,
     "curly": false,
     "no-empty-interface": false,
-    "no-string-literal": false
+    "no-string-literal": false,
+    "ban-types": false
   }
 }

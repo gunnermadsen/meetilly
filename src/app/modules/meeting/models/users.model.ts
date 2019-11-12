@@ -1,3 +1,3 @@
 import { IPayload } from '@/modules/main/models/payload.model';
 
-export interface IUsers extends IPayload {}
+export interface IUser extends IPayload {}
