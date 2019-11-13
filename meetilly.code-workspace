@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "/Users/gunnermadsen/Documents/development/Projects/Portfolio/PortfolioAPI"
+		}
+	],
+	"settings": {
+		"typescript.tsdk": "ScreenShare/node_modules/typescript/lib",
+		"merge-conflict.codeLens.enabled": false
+	}
+}

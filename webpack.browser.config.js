@@ -1,17 +1,25 @@
 const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const path = require('path');
+const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
 
 module.exports = {
     entry: './src/main.ts',
     resolve: {
         extensions: ['.ts', '.js'],
-        alias: {
-            '@': path.resolve(__dirname, 'src/app/'),
-            '@env': path.resolve(__dirname, 'src/environment')
-        }
+        // alias: {
+        //     '@': path.resolve(__dirname, 'src/app/'),
+        //     '@env': path.resolve(__dirname, 'src/environment')
+        // }
+
+        // alternative to path mappings in tsconfig.json
+        plugins: [
+            new TsconfigPathsPlugin({ configFile: './tsconfig.json' })
+        ]
     },
+    externals: ['ws'],
     module: {
+        noParse: ['ws'],
         rules: [
             {
                 test: /\.ts$/,

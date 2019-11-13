@@ -8,9 +8,7 @@ import { sizeConstraints } from './constraints'
 import adapter from 'webrtc-adapter'
 import { ToastrService } from 'ngx-toastr'
 
-import * as md5 from 'md5'
 import * as uuid from 'uuid';
-
 
 import { MeetingService } from '@/modules/meeting/services/meeting.service'
 import { IPayload } from '@/modules/main/models/payload.model'
@@ -384,10 +382,12 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
       if (this.users.length <= 1 && this._connections[id].signalingState !== "stable") {
         this.logEvent("---> But the signaling state isn't stable, so triggering rollback")
+
         await Promise.all([
           this._connections[id].setLocalDescription({ type: "rollback" }),
           this._connections[id].setRemoteDescription(description)
         ])
+        
         return
 
       } else {
@@ -560,7 +560,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
     if (this.users.length === 1) {
       this._resetMeetingRoom(payload.clientId)
     }
-    this._toastrService.info(`${payload.member} (${payload.sender}) has left the meeting`)
+    this._toastrService.info(`${payload.member} (${payload.member}) has left the meeting`)
   }
 
   private _resetMeetingRoom(id: string): void {
@@ -568,7 +568,11 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this.logEvent("---> Closing the User and Display Media Tracks")
 
     this._webcamStreams[id].getTracks().forEach((track: MediaStreamTrack) => track.stop())
-    this._displayStreams[id].getTracks().forEach((track: MediaStreamTrack) => track.stop())
+    
+    if (this.isSharingScreen) {
+      this._displayStreams[id].getTracks().forEach((track: MediaStreamTrack) => track.stop())
+      this.isSharingScreen = false
+    }
 
     this._store$.dispatch(setMeetingViewState({ meetingViewState: false }))
 
@@ -584,7 +588,6 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this._videoContainer.nativeElement.style.display = 'none'
     this.isVideoConferenceMode = !this.isVideoConferenceMode
     this.isDashboardHidden = false
-    this.isSharingScreen = false
 
     this.closeConference$.next(false)
     this.closeConference$.unsubscribe()

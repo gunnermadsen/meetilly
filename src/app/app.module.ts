@@ -1,5 +1,5 @@
 import { BrowserModule } from '@angular/platform-browser';
-import { NgModule } from '@angular/core';
+import { NgModule, isDevMode } from '@angular/core';
 
 import { AppRouterModule } from './app.router.module';
 import { AppComponent } from './app.component';
@@ -13,10 +13,13 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { SocketIoModule, SocketIoConfig } from 'ngx-socket-io';
 import { StoreModule } from '@ngrx/store';
 import { MeetingMap } from './reducers';
-import { MeetingSettingsReducer } from './modules/main/store/reducers/meeting-settings.reducer';
+import { environment } from '@env/environment';
+
+const production = true
 
 const config: SocketIoConfig = {
-  url: 'http://localhost:3434',
+  // url: environment.production ? 'https://portfolioapis.herokuapp.com' : 'http://localhost:3000',
+  url: production ? 'https://portfolioapis.herokuapp.com' : 'http://localhost:3000',
   options: {
     transports: [ 'websocket' ],
     reconnection: true,
@@ -31,10 +34,10 @@ const config: SocketIoConfig = {
   declarations: [
     AppComponent,
     LoginComponent,
-    RegisterComponent
+    RegisterComponent,
   ],
   imports: [
-    BrowserModule,
+    BrowserModule.withServerTransition({ appId: 'serverApp' }),
     AppRouterModule,
     BrowserAnimationsModule,
     CoreModule,

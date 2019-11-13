@@ -3,7 +3,6 @@ import { Routes, RouterModule } from '@angular/router';
 import { LoginComponent } from './modules/home/components/login/login.component';
 import { RegisterComponent } from './modules/home/components/register/register.component';
 import { AuthGuardService } from './core/guards/auth.guard';
-import { MeetingComponent } from './modules/meeting/components/meeting/meeting.component';
 import { MeetingVerificationResolver } from './core/guards/verify-meeting.guard';
 
 const routes: Routes = [
@@ -18,11 +17,11 @@ const routes: Routes = [
   {
     path: 'main',
     canActivate: [AuthGuardService],
-    loadChildren: './modules/main/main.module#MainModule'
+    loadChildren: () => import('./modules/main/main.module').then(mod => mod.MainModule)
   },
   {
     path: 'meeting',
-    loadChildren: './modules/meeting/meeting.module#MeetingModule',
+    loadChildren: () => import('./modules/meeting/meeting.module').then(mod => mod.MeetingModule),
     canActivate: [AuthGuardService],
     resolve: {
       result: MeetingVerificationResolver

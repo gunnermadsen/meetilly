@@ -1,20 +1,23 @@
-import { Injectable } from '@angular/core';
-import { Store } from '@ngrx/store';
-import { AppState } from '../../reducers/index';
+import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
 import { CoreModule } from '../core.module';
 import { CanActivate, Router } from '@angular/router';
+import { isPlatformBrowser } from '@angular/common';
 
 
 @Injectable({ providedIn: CoreModule })
 export class AuthGuardService implements CanActivate {
 
-  constructor(private router: Router, private store: Store<AppState>) { }
+  private _account: Storage
+
+  constructor(private router: Router, @Inject(PLATFORM_ID) private _platformId: Object) {
+    if (isPlatformBrowser(this._platformId)) {
+      this._account = JSON.parse(localStorage.getItem('Account'))
+    }
+  }
 
   canActivate(): boolean {
-
-    const account = JSON.parse(localStorage.getItem('Account'))
     
-    if (account && account.JWTToken) {
+    if (this._account && this._account.JWTToken) {
       return true;
     } else {
       this.router.navigateByUrl('/login');
