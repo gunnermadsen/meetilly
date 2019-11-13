@@ -14,7 +14,7 @@
                         <mat-select (selectionChange)="setSelectedUser($event)" [formControl]="selectedUser">
                             <mat-option [value]="100" [disabled]="true">Select a user</mat-option>
                             <mat-option [value]="i" *ngFor="let user of users; index as i" > <!-- [disabled]="user.userType === type" -->
-                                {{ user.member }} ({{ user.userType }})
+                                {{ user.member }} ({{ user.sender }})
                             </mat-option>
                         </mat-select>
                     </mat-form-field>
@@ -34,7 +34,11 @@
                                     <!-- Display a weekday and time when the conversation was started -->
                                     <!-- <mat-divider *ngIf="messages.length"> {{ messages[0].timestamp | date : 'EEE, h' }} </mat-divider> -->
                                 </div>
-                                <div class="message" *ngFor="let message of messages[i]; index as j" meetingMessage [userType]="message.userType" [oppositeUserType]="oppositeUserType">
+                                <div class="message" 
+                                    *ngFor="let message of messages[i]; index as j" 
+                                    meetingMessage 
+                                    [userType]="message.userType" 
+                                    [receiver]="receiver">
                             
                                     <div [ngSwitch]="message.contentType">
                                         <div *ngSwitchCase="'file'">
@@ -61,7 +65,7 @@
                             <textarea [formControl]="messageArea" matInput cdkTextareaAutosize #autosize="cdkTextareaAutosize" cdkAutosizeMinRows="1" cdkAutosizeMaxRows="10"></textarea>
                         </mat-form-field>
                     </div>
-                    <button mat-mini-fab color="primary" (click)="sendMessage($event)"><mat-icon>arrow_upward</mat-icon></button>
+                    <button mat-mini-fab color="primary" (click)="sendDataChannelMessage($event)"><mat-icon>arrow_upward</mat-icon></button>
                     <button mat-mini-fab color="accent" (click)="uploader.click()"><mat-icon>cloud_upload</mat-icon></button>
                     <input type="file" hidden (change)="sendFile($event)" #uploader>
                 </div>

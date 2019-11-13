@@ -10,7 +10,7 @@ export class MessageStylesDirective implements OnChanges {
   private userType: string
   
   @Input() 
-  private oppositeUserType: string
+  private receiver: string
 
   constructor(private element: ElementRef, private renderer: Renderer2) { }
 
@@ -20,12 +20,12 @@ export class MessageStylesDirective implements OnChanges {
   }
 
   public alignMessage(): void {
-    const value = this.userType === this.oppositeUserType ? 'flex-start' : 'flex-end'
+    const value = this.userType === this.receiver ? 'flex-start' : 'flex-end'
     this.renderer.setStyle(this.element.nativeElement, 'align-self', value)  
   }
 
   public setMessageColor(): void {
-    const value = this.userType === this.oppositeUserType ? 'rgba(16, 160, 16, 0.55)' : 'rgba(71, 139, 213, 0.988)' // greeen : blue (respectively)
+    const value = this.userType === this.receiver ? 'rgba(16, 160, 16, 0.55)' : 'rgba(71, 139, 213, 0.988)' // greeen : blue (respectively)
     this.renderer.setStyle(this.element.nativeElement, 'background-color', value)
   }
 

@@ -8,7 +8,7 @@ import { sizeConstraints } from './constraints'
 import adapter from 'webrtc-adapter'
 import { ToastrService } from 'ngx-toastr'
 
-import * as uuid from 'uuid';
+import * as uuid from 'uuid'
 
 import { MeetingService } from '@/modules/meeting/services/meeting.service'
 import { IPayload } from '@/modules/main/models/payload.model'
@@ -41,11 +41,11 @@ export class MeetingComponent implements OnInit, OnDestroy {
   public cameraList: MediaDeviceInfo[]
   public microphoneList: MediaDeviceInfo[]
   private _meetingID: number = null
-  public member: string = null
+  public userName: string = null
   public meetingData: any = null
   public dataSource: MatTableDataSource<IUser>
-  public displayedColumns: string[] = ['name', 'type', 'clientId'];
-  public sender: string = null
+  public displayedColumns: string[] = ['name', 'type', 'clientId']
+  public userType: string = null
   private destroy$: Subject<boolean> = new Subject<boolean>()
   private closeConference$: Subject<boolean> = new Subject<boolean>()
   private _displayControls$: BehaviorSubject<boolean> = new BehaviorSubject<boolean>(true)
@@ -80,13 +80,13 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
   constructor(private _route: ActivatedRoute, private _meetingService: MeetingService, private _cdr: ChangeDetectorRef, private _toastrService: ToastrService, private _store$: Store<AppState>) {
     this._meetingID = this._route.snapshot.queryParams.meetingId
-    this.member = this._route.snapshot.queryParams.member
-    this.sender = this._route.snapshot.queryParams.mode
+    this.userName = this._route.snapshot.queryParams.member
+    this.userType = this._route.snapshot.queryParams.mode
     this._connectionId = uuid.v4()
 
     this.meetingData = this._route.snapshot.data.result[0]
 
-    this.receiver = this.sender === 'host' ? 'guest' : 'host'
+    this.receiver = this.userType === 'host' ? 'guest' : 'host'
     
     this._initializeMeetingSignaling()
     this._checkForReadiness(null)
@@ -100,20 +100,20 @@ export class MeetingComponent implements OnInit, OnDestroy {
   private _listenForReadyEvent(): void {
     this._meetingService.ready$.pipe(takeUntil(this.destroy$)).subscribe((payload: IPayload) => {
 
-      this.logEvent(`**** Initial Signal Emitted by ${this.sender}`)
+      this.logEvent(`**** Initial Signal Emitted by ${this.userType}`)
       this._addMember({ ...payload, clientId: this._connectionId })
 
-      this.logEvent(`---> ${this.sender} sending 'signal' event on socketID: ${payload.roomId}`)
+      this.logEvent(`---> ${this.userType} sending 'signal' event on socketID: ${payload.roomId}`)
 
       this._meetingService.signal('signal', {
         meetingId: this._meetingID,
         roomId: payload.roomId,
         clientId: this._connectionId,
-        member: this.member,
+        member: this.userName,
         mode: 'signaling',
         data: null, 
         receiver: this.receiver,
-        sender: this.sender
+        sender: this.userType
       })
     })
   }
@@ -135,21 +135,21 @@ export class MeetingComponent implements OnInit, OnDestroy {
   private _checkForReadiness(roomId: string | null): void {
     //check the socket server to see if there are other meetting participants
     // on this signal, we obtain a socket id
-    this.logEvent(`**** ${this.sender} sending 'standby' event. Socket ID has not been set`)
+    this.logEvent(`**** ${this.userType} sending 'standby' event. Socket ID has not been set`)
 
     this._meetingService.signal('standby', { 
       meetingId: this._meetingID,
       mode: "waiting",
       roomId: roomId,
-      sender: this.sender,
+      sender: this.userType,
       receiver: this.receiver,
-      member: this.member 
+      member: this.userName 
     })
   }
 
   private _initializePeerConnection(payload?: IPayload): void {
 
-    this.logEvent(`**** Creating New RTC Peer Connection for ${this.sender}`)
+    this.logEvent(`**** Creating New RTC Peer Connection for ${this.userType}`)
 
     this.isStreamingReady = true
     const roomId = payload.roomId
@@ -180,15 +180,15 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
     // once a connection is established, we want to tell the member under the specified roomId that 
     // this client has created its peer connection so that they can create connections appropriately
-    this.logEvent(`---> ${this.sender} sending 'exchange' event on socketID: ${payload.roomId}`)
+    this.logEvent(`---> ${this.userType} sending 'exchange' event on socketID: ${payload.roomId}`)
 
     this._meetingService.signal('exchange', {
       clientId: id, 
       meetingId: this._meetingID,
       roomId: roomId,
-      member: this.member, 
+      member: this.userName, 
       receiver: this.receiver,
-      sender: this.sender,
+      sender: this.userType,
       mode: 'exchange'
     })
 
@@ -304,11 +304,11 @@ export class MeetingComponent implements OnInit, OnDestroy {
         meetingId: this._meetingID,
         clientId: id,
         roomId: roomId,
-        member: this.member,
+        member: this.userName,
         mode: "icecandidate",
         data: event.candidate,
         receiver: this.receiver,
-        sender: this.sender
+        sender: this.userType
       })
     }
   }
@@ -333,11 +333,11 @@ export class MeetingComponent implements OnInit, OnDestroy {
         meetingId: this._meetingID,
         clientId: id,
         roomId: roomId,
-        member: this.member,
+        member: this.userName,
         mode: "offer",
         data: this._connections[id].localDescription,
         receiver: this.receiver,
-        sender: this.sender
+        sender: this.userType
       })
       
       this.logEvent(`---> Sending the offer to the ${this.receiver}, using localDescription: ${this._connections[id].localDescription}`)
@@ -411,11 +411,11 @@ export class MeetingComponent implements OnInit, OnDestroy {
           meetingId: this._meetingID,
           roomId: message.roomId, //this._findRoomIdUsingClientId(id),
           clientId: id,
-          member: this.member,
+          member: this.userName,
           mode: "answer",
           data: this._connections[id].localDescription,
           receiver: this.receiver,
-          sender: this.sender
+          sender: this.userType
         })
 
       }
@@ -441,7 +441,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
   private _handleDataChannelEvent(id: string, roomId: string, event: RTCDataChannelEvent): void {
     this.logEvent(`---> Data Channel Initiated on ${this.receiver}`)
-    this._dataChannels[id]                = event.channel
+    this._dataChannels[id]              = event.channel
     this._dataChannels[id].onmessage      = this._handleDataChannelMessage          .bind(this, id)
     this._dataChannels[id].onopen         = this._handleDataChannelStatusChange     .bind(this, id)
     this._dataChannels[id].onclose        = this._handleDataChannelStatusChange     .bind(this, id)
@@ -453,12 +453,41 @@ export class MeetingComponent implements OnInit, OnDestroy {
     }
   }
 
+  public sendDataChannelMessage(): void {
+
+    const id = this.selectedDataChannelId
+
+    const index = this.users.findIndex((user: IPayload) => user.clientId === id)
+
+    const content = {
+      sender: this.userName, // the username of the participant sending the message
+      body: this.messageArea.value,
+      contentType: 'message',
+      userType: this.userType, // client or host?
+      timestamp: new Date(),
+      clientId: id,
+      messageThreadIndex: index // the index of the participant in the receiving users messenger window. 
+                                // (theoretically irrevelant in multiparticipant video conferences)
+    }
+
+    if (this.messages.length) {
+      this.messages[index].push(content)
+    } else {
+      this.messages.push([content])
+    }
+
+    this.messageArea.setValue("")
+    this._dataChannels[id].send(JSON.stringify(content))
+    this.logEvent(`**** DataChannel message sent: ${JSON.stringify(content)}`)
+  }
+
   private _handleDataChannelMessage(id: string, event: MessageEvent): void {
     this.logEvent(`**** DataChannel Message Received: ${event.data}`)
     const message = JSON.parse(event.data)
     this._toastrService.info(`New Message from ${message.sender} (${message.userType})`)
-    const index: number = message.messageThreadIndex
-
+    // const index: number = message.messageThreadIndex
+    const index = this.users.findIndex((user: IPayload) => user.clientId === id)
+    
     if (this.tabs.length !== this.users.length) {
       this.tabs.push(this.users[index])
     }
@@ -548,7 +577,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this._meetingService.signal('signal', {
       meetingId: this._meetingID,
       mode: 'hangup',
-      member: this.member,
+      member: this.userName,
       clientId: user.clientId,
       roomId: user.roomId
     })
@@ -715,14 +744,14 @@ export class MeetingComponent implements OnInit, OnDestroy {
         skipWhile(() => !this._displayControls$.value),
         tap((event: MouseEvent) => {
           event.preventDefault()
-          return this._displayControls$.next(true);
+          return this._displayControls$.next(true)
         })
       ),
       fromEvent(document.getElementById('hardware-menu'), 'click').pipe(
         tap((event: MouseEvent) => {
           event.preventDefault()
           event.stopPropagation()
-          this._displayControls$.next(true);
+          this._displayControls$.next(true)
         }),
         debounceTime(10000),
         tap(() => this._displayControls$.next(false))
@@ -819,33 +848,6 @@ export class MeetingComponent implements OnInit, OnDestroy {
       this._connections[id].addTrack(track, stream)
       this.logEvent(`---> Added track: ${track.label} to connection`)
     })
-  }
-
-  public sendMessage(): void {
-    
-    const id = this.selectedDataChannelId
-
-    const index = this.users.findIndex((user: IPayload) => user.clientId === id)
-
-    const content = {
-      sender: this.member,
-      body: this.messageArea.value,
-      contentType: 'message',
-      userType: this.sender,
-      timestamp: new Date(),
-      clientId: id,
-      messageThreadIndex: index
-    }
-
-    if (this.messages.length) {
-      this.messages[index].push(content)
-    } else {
-      this.messages.push([content])
-    }
-
-    this.messageArea.setValue("")
-    this._dataChannels[id].send(JSON.stringify(content))
-    this.logEvent(`**** DataChannel message sent: ${JSON.stringify(content)}`)
   }
 
   private _handleGetUserMediaError(error: Error) {
