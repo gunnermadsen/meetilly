@@ -37,12 +37,13 @@
                                 <div class="message" 
                                     *ngFor="let message of messages[i]; index as j" 
                                     meetingMessage 
-                                    [userType]="message.userType" 
-                                    [receiver]="receiver">
+                                    [userType]="message.userType"
+                                    [contentType]="message.contentType"
+                                    [oppositeUserType]="oppositeUserType">
                             
                                     <div [ngSwitch]="message.contentType">
                                         <div *ngSwitchCase="'file'">
-                                            <a href="#">{{ message.filename }}</a>
+                                            <a href="#">{{ message.file.name }}</a>
                                         </div>
                                         <div *ngSwitchCase="'message'">
                                             {{ message.body }}
@@ -67,7 +68,7 @@
                     </div>
                     <button mat-mini-fab color="primary" (click)="sendDataChannelMessage($event)"><mat-icon>arrow_upward</mat-icon></button>
                     <button mat-mini-fab color="accent" (click)="uploader.click()"><mat-icon>cloud_upload</mat-icon></button>
-                    <input type="file" hidden (change)="sendFile($event)" #uploader>
+                    <input type="file" hidden (change)="sendDataChannelFile($event)" #uploader>
                 </div>
             </div>
         </mat-sidenav>

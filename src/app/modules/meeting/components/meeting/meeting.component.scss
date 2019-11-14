@@ -283,13 +283,20 @@ textarea {
 
 .message {
   max-width: 340px;
-  width: auto;
-  height: auto;
   padding: 10px 15px;
   margin: 5px;
   border-radius: 12px;
   word-wrap: break-word;
 }
+
+.text-message {
+  width: auto;
+  height: auto;
+}
+
+// .file-message {
+  
+// }
 
 .message-input, .message-form {
   display: flex;

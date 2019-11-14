@@ -1,5 +1,5 @@
-import { Component, OnInit, ViewChild, ElementRef, OnDestroy, ChangeDetectorRef, ViewChildren, QueryList } from '@angular/core'
-import { ActivatedRoute } from '@angular/router'
+import { Component, OnInit, ViewChild, ElementRef, OnDestroy, ChangeDetectorRef, ViewChildren, QueryList, HostListener } from '@angular/core'
+import { ActivatedRoute, Router } from '@angular/router'
 import { FormControl } from '@angular/forms'
 
 import { takeUntil, map, tap, debounceTime, skipWhile } from 'rxjs/operators'
@@ -28,7 +28,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
   @ViewChild('smallVideoArea', { static: false }) private _smallVideoArea: ElementRef<HTMLVideoElement>
   @ViewChild('mainVideoArea', { static: false }) private _mainVideoArea: ElementRef<HTMLVideoElement>
   @ViewChild('videoContainer', { static: false }) private _videoContainer: ElementRef<HTMLElement>
-  @ViewChildren('remoteVideo') private _remoteVideoAreas: QueryList<ElementRef<HTMLVideoElement>>
+  // @ViewChildren('remoteVideo') private _remoteVideoAreas: QueryList<ElementRef<HTMLVideoElement>>
   public selectedUser: FormControl = new FormControl()
   public messageToggle: FormControl = new FormControl({ disabled: true })
   public messageArea: FormControl = new FormControl()
@@ -40,6 +40,8 @@ export class MeetingComponent implements OnInit, OnDestroy {
   public speakerList: MediaDeviceInfo[] = []
   public cameraList: MediaDeviceInfo[]
   public microphoneList: MediaDeviceInfo[]
+  private _fileBuffer: ArrayBuffer[] = []
+  private _fileSize: number
   private _meetingID: number = null
   public userName: string = null
   public meetingData: any = null
@@ -47,12 +49,12 @@ export class MeetingComponent implements OnInit, OnDestroy {
   public displayedColumns: string[] = ['name', 'type', 'clientId']
   public userType: string = null
   private destroy$: Subject<boolean> = new Subject<boolean>()
-  private closeConference$: Subject<boolean> = new Subject<boolean>()
+  private _closeConference$: Subject<boolean> = new Subject<boolean>()
   private _displayControls$: BehaviorSubject<boolean> = new BehaviorSubject<boolean>(true)
   public displayControls$: Observable<boolean> = this._displayControls$.asObservable()
   private _users$: BehaviorSubject<IUser[]> = new BehaviorSubject<IUser[]>([])
   public users$: Observable<IUser[]> = this._users$.asObservable()
-  public receiver: string = null
+  public oppositeUserType: string = null
   public messages: any[] = []
   public users: IUser[] = []
   public tabs: IPayload[] = []
@@ -64,6 +66,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
   public isDashboardHidden: boolean = false
   public isPaused: boolean = false
   public isSharingScreen: boolean = false
+  public isFileTransfering: boolean = false
   public isMessageTargetSelected: boolean = false
   public isVoice: boolean = false
   private _connectionId: string
@@ -78,7 +81,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
     return this.webcamStreams
   }
 
-  constructor(private _route: ActivatedRoute, private _meetingService: MeetingService, private _cdr: ChangeDetectorRef, private _toastrService: ToastrService, private _store$: Store<AppState>) {
+  constructor(private _route: ActivatedRoute, private _meetingService: MeetingService, private _cdr: ChangeDetectorRef, private _toastrService: ToastrService, private _store$: Store<AppState>, private _router: Router) {
     this._meetingID = this._route.snapshot.queryParams.meetingId
     this.userName = this._route.snapshot.queryParams.member
     this.userType = this._route.snapshot.queryParams.mode
@@ -86,7 +89,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
     this.meetingData = this._route.snapshot.data.result[0]
 
-    this.receiver = this.userType === 'host' ? 'guest' : 'host'
+    this.oppositeUserType = this.userType === 'host' ? 'guest' : 'host'
     
     this._initializeMeetingSignaling()
     this._checkForReadiness(null)
@@ -112,7 +115,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
         member: this.userName,
         mode: 'signaling',
         data: null, 
-        receiver: this.receiver,
+        receiver: this.oppositeUserType,
         sender: this.userType
       })
     })
@@ -120,11 +123,12 @@ export class MeetingComponent implements OnInit, OnDestroy {
   
   private _initializeMeetingSignaling(): void {
     merge(
-      this._meetingService.standby$,
+      this._meetingService.timer$,
       this._meetingService.signal$,
       this._meetingService.closed$,
+      this._meetingService.standby$,
       this._meetingService.exchange$,
-      this._meetingService.timer$,
+      this._meetingService.transfer$
     )
     .pipe(
       map((payload: IPayload) => payload),
@@ -142,7 +146,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
       mode: "waiting",
       roomId: roomId,
       sender: this.userType,
-      receiver: this.receiver,
+      receiver: this.oppositeUserType,
       member: this.userName 
     })
   }
@@ -187,7 +191,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
       meetingId: this._meetingID,
       roomId: roomId,
       member: this.userName, 
-      receiver: this.receiver,
+      receiver: this.oppositeUserType,
       sender: this.userType,
       mode: 'exchange'
     })
@@ -233,6 +237,10 @@ export class MeetingComponent implements OnInit, OnDestroy {
           this._checkForReadiness(event.roomId)
           this._initializePeerConnection(event)
         }
+        break
+
+      case "tranfer":
+        this._setFileUploadState(event)
         break
 
       case "starttimer":
@@ -282,16 +290,18 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this.logEvent(`**** ICE connection state changed to: ${state}`)
 
     switch (state) {
-      case "closed":
-        this.endVideoConference()
-        // this.closeMeeting()
-        break
       case "failed":
+        this._restartConnection(id)
+        break
+      case "closed":
       case "disconnected":
         // this.isStreamingReady = false
-
+        if (this._connections[id]) {
+          this.endVideoConference()
+          this.closeMeetingConnection()
+        }
         // trigger ice renegotiation while creating a new offer
-        this._restartConnection(id)
+        // this._restartConnection(id)
         break
     }
   }
@@ -307,7 +317,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
         member: this.userName,
         mode: "icecandidate",
         data: event.candidate,
-        receiver: this.receiver,
+        receiver: this.oppositeUserType,
         sender: this.userType
       })
     }
@@ -336,11 +346,11 @@ export class MeetingComponent implements OnInit, OnDestroy {
         member: this.userName,
         mode: "offer",
         data: this._connections[id].localDescription,
-        receiver: this.receiver,
+        receiver: this.oppositeUserType,
         sender: this.userType
       })
       
-      this.logEvent(`---> Sending the offer to the ${this.receiver}, using localDescription: ${this._connections[id].localDescription}`)
+      this.logEvent(`---> Sending the offer to the ${this.oppositeUserType}, using localDescription: ${this._connections[id].localDescription}`)
     } catch (error) {
       this._reportError(error)
     }
@@ -367,7 +377,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
   private async _handleOfferMessage(message: IPayload): Promise<void> {
     
-    this.logEvent(`**** Received video chat offer from ${this.receiver}`)
+    this.logEvent(`**** Received video chat offer from ${this.oppositeUserType}`)
 
     const id = message.clientId
 
@@ -414,7 +424,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
           member: this.userName,
           mode: "answer",
           data: this._connections[id].localDescription,
-          receiver: this.receiver,
+          receiver: this.oppositeUserType,
           sender: this.userType
         })
 
@@ -440,8 +450,8 @@ export class MeetingComponent implements OnInit, OnDestroy {
   }
 
   private _handleDataChannelEvent(id: string, roomId: string, event: RTCDataChannelEvent): void {
-    this.logEvent(`---> Data Channel Initiated on ${this.receiver}`)
-    this._dataChannels[id]              = event.channel
+    this.logEvent(`---> Data Channel Initiated on ${this.oppositeUserType}`)
+    this._dataChannels[id]                = event.channel
     this._dataChannels[id].onmessage      = this._handleDataChannelMessage          .bind(this, id)
     this._dataChannels[id].onopen         = this._handleDataChannelStatusChange     .bind(this, id)
     this._dataChannels[id].onclose        = this._handleDataChannelStatusChange     .bind(this, id)
@@ -453,39 +463,38 @@ export class MeetingComponent implements OnInit, OnDestroy {
     }
   }
 
+  private _setFileUploadState(event: any): void {
+    this.isFileTransfering = event.data.isFileTransfering
+  }
+
   public sendDataChannelMessage(): void {
 
     const id = this.selectedDataChannelId
 
     const index = this.users.findIndex((user: IPayload) => user.clientId === id)
 
-    const content = {
+    const message = {
       sender: this.userName, // the username of the participant sending the message
       body: this.messageArea.value,
       contentType: 'message',
       userType: this.userType, // client or host?
       timestamp: new Date(),
       clientId: id,
-      messageThreadIndex: index // the index of the participant in the receiving users messenger window. 
-                                // (theoretically irrevelant in multiparticipant video conferences)
+      messageThreadIndex: index
     }
 
-    if (this.messages.length) {
-      this.messages[index].push(content)
-    } else {
-      this.messages.push([content])
-    }
+    this._addMessage(index, message)
 
     this.messageArea.setValue("")
-    this._dataChannels[id].send(JSON.stringify(content))
-    this.logEvent(`**** DataChannel message sent: ${JSON.stringify(content)}`)
+    this._dataChannels[id].send(JSON.stringify(message))
+    this.logEvent(`**** DataChannel message sent: ${JSON.stringify(message)}`)
   }
 
   private _handleDataChannelMessage(id: string, event: MessageEvent): void {
     this.logEvent(`**** DataChannel Message Received: ${event.data}`)
+
     const message = JSON.parse(event.data)
     this._toastrService.info(`New Message from ${message.sender} (${message.userType})`)
-    // const index: number = message.messageThreadIndex
     const index = this.users.findIndex((user: IPayload) => user.clientId === id)
     
     if (this.tabs.length !== this.users.length) {
@@ -496,15 +505,87 @@ export class MeetingComponent implements OnInit, OnDestroy {
       this.selectedDataChannelId = message.clientId
     }
 
+    this._addMessage(index, message)
+
+    this.selectedUser.setValue(index)
+    this.isMessageTargetSelected = true
+    this._cdr.detectChanges()
+  }
+
+  public sendDataChannelFile(changeEvent: any): void {
+
+    if (!changeEvent.target.files) {
+      return
+    }
+
+    const file: File = changeEvent.target.files[0]
+    const id = this.selectedDataChannelId
+    const chunkSize = 16384
+    const index = this.users.findIndex((user: IPayload) => user.clientId === id)
+    const user = this.users.find((user: IUser) => user.clientId === id)
+
+    const message = {
+      sender: this.userName,
+      body: "File Transfer",
+      file: {
+        name: file.name,
+        size: file.size,
+      },
+      contentType: 'file',
+      userType: this.userType,
+      clientId: id,
+      messageThreadIndex: index,
+      timestamp: new Date()
+    }
+
+    const payload = JSON.stringify(message)
+
+    // this.messages[index].push(message)
+    this._addMessage(index, message)
+
+    // this._dataChannels[id].send(payload)
+
+    // tell the targeted participant that a file sharing operation is in progress
+    this._meetingService.signal('filetransfer', {
+      meetingId: this._meetingID,
+      member: this.userName,
+      filename: file.name,
+      filesize: file.size,
+      isUpload: true,
+      roomId: user.roomId,
+      mode: 'transfer',
+      data: {
+        payload: payload,
+        transferInProgress: true
+      },
+      sender: this.oppositeUserType
+    })
+
+    const sliceFile = (offset: number) => {
+
+      const reader = new FileReader()
+
+      reader.onload = (event: any) => {
+        this._dataChannels[id].send(event.target.result)
+
+        if (file.size > (offset + event.target.result.byteLength)) {
+          setTimeout(sliceFile, 0, (offset + chunkSize))
+        }
+      }
+
+      const slice = file.slice(offset, (offset + chunkSize))
+      reader.readAsArrayBuffer(slice)
+    }
+    sliceFile(0)
+    // this.fileTransfer = false
+  }
+
+  private _addMessage(index: number, message: any): void {
     if (this.messages.length) {
       this.messages[index].push(message)
     } else {
       this.messages.push([message])
     }
-
-    this.selectedUser.setValue(index)
-    this.isMessageTargetSelected = true
-    this._cdr.detectChanges()
   }
 
   private _handleDataChannelOnOpenEvent(id: string, roomId: string, event: any): void {
@@ -515,27 +596,31 @@ export class MeetingComponent implements OnInit, OnDestroy {
     }
   }
 
-  // public closeMeeting(): void {
+  public closeMeetingConnection(): void {
 
-  //   if (this._connections[this.selectedConnectionId]) {
+    if (this._connections[this.selectedConnectionId]) {
+      
+      this.logEvent("**** Closing the peer connection and datachannel")
 
-  //     this.logEvent("**** Closing the peer connection and datachannel")
-      
-  //     this.users.forEach((user, index: number) => {
-  //       const id = user.clientId
-  //       this._connections[id].getTransceivers().forEach((track: RTCRtpTransceiver) => track.stop())
-  //       this._connections[id].close()
-  //       this._dataChannels[id].close()
-  //       this._connections[id] = null
-  //       this._dataChannels = null
-  //       this._webcamStreams[id] = null
-  //       this._displayStreams[id] = null
-  //     })
-      
-  //     this.closeConference$.next(null)
-  //     this.closeConference$.unsubscribe()
-  //   }
-  // }
+      const that = this
+   
+      this.users.forEach((user: IUser, index: number) => {
+
+        const id = user.clientId
+
+        that._stopTracks(id)
+
+        // this._connections[id].getTransceivers().forEach((track: RTCRtpTransceiver) => track.stop())
+        that._connections[id].close()
+        that._dataChannels[id].close()
+        that._connections[id] = null
+        that._dataChannels = null
+        that._webcamStreams[id] = null
+        that._displayStreams[id] = null
+
+      })
+    }
+  }
 
   private async _restartConnection(id: string): Promise<void> {
     // for now a dedicated method is used for triggering connection restart
@@ -571,6 +656,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
     // if there is only one other user, close the meeting entirely
     if (this.users.length === 1) {
       this._resetMeetingRoom(user.clientId)
+      // this.closeMeetingConnection()
     }
 
     // when we hangup, we notify the other participant(s) that we are leaving the videoconference
@@ -596,12 +682,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this.logEvent("**** Ending the Video Conference")
     this.logEvent("---> Closing the User and Display Media Tracks")
 
-    this._webcamStreams[id].getTracks().forEach((track: MediaStreamTrack) => track.stop())
-    
-    if (this.isSharingScreen) {
-      this._displayStreams[id].getTracks().forEach((track: MediaStreamTrack) => track.stop())
-      this.isSharingScreen = false
-    }
+    this._stopTracks(id)
 
     this._store$.dispatch(setMeetingViewState({ meetingViewState: false }))
 
@@ -618,15 +699,22 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this.isVideoConferenceMode = !this.isVideoConferenceMode
     this.isDashboardHidden = false
 
-    this.closeConference$.next(false)
-    this.closeConference$.unsubscribe()
+    this._closeConference$.next(false)
+  }
+
+  private _stopTracks(id: string) {
+    if (this._webcamStreams[id]) {
+      this._webcamStreams[id].getTracks().forEach((track: MediaStreamTrack) => track.stop())
+  
+      if (this.isSharingScreen) {
+        this._displayStreams[id].getTracks().forEach((track: MediaStreamTrack) => track.stop())
+        this.isSharingScreen = false
+      }
+    }
   }
 
   public beginMeetingTimer(): void {
-    this.timeCounter$ = interval(1000).pipe(
-      map((time: number) => time * 1000),
-      takeUntil(this.closeConference$)
-    )
+    this.timeCounter$ = interval(1000).pipe(map((time: number) => time * 1000), takeUntil(this._closeConference$))
   }
 
   public setSelectedUser(event: MatSelectChange): void {
@@ -652,10 +740,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
   }
 
   private _addMember(payload: IUser): void {
-    const duplicates: IUser[] = this.users.filter(
-      (user: IUser) => user.clientId === payload.clientId && user.member === payload.member
-    )
-
+    const duplicates: IUser[] = this.users.filter((user: IUser) => user.clientId === payload.clientId && user.member === payload.member)
     if (duplicates.length) {
       return
     } else {
@@ -677,7 +762,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this._webcamStreams[this.selectedConnectionId].getVideoTracks().map((stream: MediaStreamTrack) => stream.enabled = !stream.enabled)
   }
 
-  public changeVideo(deviceId: string, type: string): void {
+  public async changeVideo(deviceId: string, type: string): Promise<void> {
     const constraints = {
       audio: true,
       video: {
@@ -686,10 +771,10 @@ export class MeetingComponent implements OnInit, OnDestroy {
       }
     }
 
-    this.changeDevice(type, constraints)
+    await this.changeDevice(type, constraints)
   }
 
-  public changeAudio(deviceId: string, type: string): void {
+  public async changeAudio(deviceId: string, type: string): Promise<void> {
     const constraints = {
       audio: {
         deviceId: { exact: deviceId },
@@ -697,7 +782,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
       video: sizeConstraints
     }
 
-    this.changeDevice(type, constraints)
+    await this.changeDevice(type, constraints)
   }
 
   public async changeDevice(type: string, constraints: any): Promise<void> {
@@ -737,7 +822,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
       this._logError(error)
     }
   }
-
+  
   private _watchForMouseMovement(): void {
     combineLatest([
       fromEvent(document.getElementById('videoconference-controls'), 'mouseenter').pipe(
@@ -765,10 +850,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
       fromEvent(document, 'mouseleave').pipe(
         tap(() => this._displayControls$.next(false))
       )
-    ])
-    .pipe(
-      takeUntil(this.closeConference$), 
-    ).subscribe()
+    ]).pipe(takeUntil(this._closeConference$)).subscribe()
   }
 
   public async configureVideoConferenceMode(): Promise<void> {
@@ -787,7 +869,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
     try {
       this._webcamStreams[id] = await navigator.mediaDevices.getUserMedia({ audio: true, video: sizeConstraints })
 
-      this.logEvent(`---> Acquired user media for ${this.receiver}`)
+      this.logEvent(`---> Acquired user media for ${this.oppositeUserType}`)
       this._smallVideoArea.nativeElement.srcObject = this._webcamStreams[id]
 
       this._addTracksToConnection(this._webcamStreams[id], id)
@@ -884,10 +966,22 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this._logError(`Error ${message.name}: ${message.message}`)
   }
 
+  // @HostListener('window:beforeunload')
   ngOnDestroy() {
+
+    // if (Object.values(this._connections).length) {
+    //   this.closeMeeting()
+    //   this._resetMeetingRoom(this.selectedConnectionId)
+    // }
+
+    this.endVideoConference()
+
     this.destroy$.next(false)
     this.destroy$.unsubscribe()
+    this._closeConference$.next(false)
+    this._closeConference$.unsubscribe()
     this._displayControls$.next(false)
     this._displayControls$.unsubscribe()
+    
   }
 }

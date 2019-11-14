@@ -56,36 +56,40 @@ export class MainComponent implements OnInit {
 
   public startMeetingAsHost(event: MouseEvent, id: number): void {
 
+    const meetingId = id.toString()
+
     const options = {
       queryParams: {
         mode: 'host',
-        meetingId: id.toString(),
+        meetingId: meetingId,
         member: this._userName,
         // connectionId: md5(Math.floor(Math.random() * 8932839).toString())
       }
     }
 
     this._router.navigate(['/meeting'], options)
-    // this._openWindow('host', id.toString())
+    // this._openWindow('host', meetingId)
   }
 
   public joinMeetingAsGuest(): void {
 
+    const meetingId = this.form.controls['MeetingNumber'].value
+
     const options = { 
       queryParams: {
         mode: 'guest',
-        meetingId: this.form.controls['MeetingNumber'].value,
+        meetingId: meetingId,
         member: this._userName,
         // connectionId: md5(Math.floor(Math.random() * 8932839).toString())
       }
     }
 
     this._router.navigate(['/meeting'], options)
-    // this._openWindow('guest', code)
+    // this._openWindow('guest', meetingId)
   }
 
-  private _openWindow(mode: string, code: string, connectionId: string): void {
-    window.open(`/meeting?mode=${mode}&meetingId=${code}&member=${this._userName}&connectionId=${connectionId}`, "_blank", "width=1500, height=1000")
+  private _openWindow(mode: string, meetingId: string, connectionId?: string): void {
+    window.open(`/meeting?mode=${mode}&meetingId=${meetingId}&member=${this._userName}`, "_blank", "width=1500, height=1000") // &connectionId=${connectionId}
   }
 
 }

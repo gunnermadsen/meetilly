@@ -15,7 +15,7 @@ import { StoreModule } from '@ngrx/store';
 import { MeetingMap } from './reducers';
 import { environment } from '@env/environment';
 
-const production = true
+const production = false
 
 const config: SocketIoConfig = {
   // url: environment.production ? 'https://portfolioapis.herokuapp.com' : 'http://localhost:3000',
