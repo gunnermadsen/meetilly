@@ -43,7 +43,19 @@
                             
                                     <div [ngSwitch]="message.contentType">
                                         <div *ngSwitchCase="'file'">
-                                            <a href="#">{{ message.file.name }}</a>
+                                            <div class="file-name">
+                                                <a #downloadFile>{{ message.file.name }}</a>
+                                            </div>
+                                            <div class="file-progress">
+                                                <div class="progress-bar">
+                                                    <mat-progress-bar mode="determinate" [value]="fileProgress"></mat-progress-bar>
+                                                </div>
+                                                <!-- <div class="progress-status">
+                                                    <button mat-icon-button color="primary" #downloadFile download>
+                                                        <mat-icon>get_app</mat-icon>
+                                                    </button>
+                                                </div> -->
+                                            </div>
                                         </div>
                                         <div *ngSwitchCase="'message'">
                                             {{ message.body }}

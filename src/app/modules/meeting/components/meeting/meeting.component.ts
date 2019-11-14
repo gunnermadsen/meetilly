@@ -29,6 +29,13 @@ export class MeetingComponent implements OnInit, OnDestroy {
   @ViewChild('mainVideoArea', { static: false }) private _mainVideoArea: ElementRef<HTMLVideoElement>
   @ViewChild('videoContainer', { static: false }) private _videoContainer: ElementRef<HTMLElement>
   // @ViewChildren('remoteVideo') private _remoteVideoAreas: QueryList<ElementRef<HTMLVideoElement>>
+  @ViewChildren('downloadFile') public downloadFile: QueryList<ElementRef<HTMLAnchorElement>>
+  private _destroy$: Subject<boolean> = new Subject<boolean>()
+  private _closeConference$: Subject<boolean> = new Subject<boolean>()
+  private _displayControls$: BehaviorSubject<boolean> = new BehaviorSubject<boolean>(true)
+  public displayControls$: Observable<boolean> = this._displayControls$.asObservable()
+  private _users$: BehaviorSubject<IUser[]> = new BehaviorSubject<IUser[]>([])
+  public users$: Observable<IUser[]> = this._users$.asObservable()
   public selectedUser: FormControl = new FormControl()
   public messageToggle: FormControl = new FormControl({ disabled: true })
   public messageArea: FormControl = new FormControl()
@@ -41,19 +48,12 @@ export class MeetingComponent implements OnInit, OnDestroy {
   public cameraList: MediaDeviceInfo[]
   public microphoneList: MediaDeviceInfo[]
   private _fileBuffer: ArrayBuffer[] = []
-  private _fileSize: number
   private _meetingID: number = null
   public userName: string = null
   public meetingData: any = null
   public dataSource: MatTableDataSource<IUser>
   public displayedColumns: string[] = ['name', 'type', 'clientId']
   public userType: string = null
-  private destroy$: Subject<boolean> = new Subject<boolean>()
-  private _closeConference$: Subject<boolean> = new Subject<boolean>()
-  private _displayControls$: BehaviorSubject<boolean> = new BehaviorSubject<boolean>(true)
-  public displayControls$: Observable<boolean> = this._displayControls$.asObservable()
-  private _users$: BehaviorSubject<IUser[]> = new BehaviorSubject<IUser[]>([])
-  public users$: Observable<IUser[]> = this._users$.asObservable()
   public oppositeUserType: string = null
   public messages: any[] = []
   public users: IUser[] = []
@@ -71,6 +71,10 @@ export class MeetingComponent implements OnInit, OnDestroy {
   public isVoice: boolean = false
   private _connectionId: string
   public timeCounter$: Observable<number>
+  public fileProgress: number
+  public fileSize: number = 0
+  public fileName: string
+  public fileLoaded: number = 0
   
   public get webcamStreamsLength() {
     const value = Object.values(this._webcamStreams).length
@@ -101,7 +105,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
   }
 
   private _listenForReadyEvent(): void {
-    this._meetingService.ready$.pipe(takeUntil(this.destroy$)).subscribe((payload: IPayload) => {
+    this._meetingService.ready$.pipe(takeUntil(this._destroy$)).subscribe((payload: IPayload) => {
 
       this.logEvent(`**** Initial Signal Emitted by ${this.userType}`)
       this._addMember({ ...payload, clientId: this._connectionId })
@@ -132,7 +136,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
     )
     .pipe(
       map((payload: IPayload) => payload),
-      takeUntil(this.destroy$)
+      takeUntil(this._destroy$)
     ).subscribe((payload: any) => this._handleSocketMessageEvent(payload))
   }
 
@@ -233,14 +237,14 @@ export class MeetingComponent implements OnInit, OnDestroy {
         break
       
       case "closed":
-        if (this._connections.hasOwnProperty(event.clientId)) {
+        if (this._connections[event.clientId]) {
           this._checkForReadiness(event.roomId)
           this._initializePeerConnection(event)
         }
         break
 
-      case "tranfer":
-        this._setFileUploadState(event)
+      case "transfer":
+        this._setFileTransferState(event)
         break
 
       case "starttimer":
@@ -262,10 +266,8 @@ export class MeetingComponent implements OnInit, OnDestroy {
   }
 
   private _handleTrackEvent(id: string, event: RTCTrackEvent): void {
-    // in a meeting with multiple peers, 
-    // we want to add their remote media 
-    // tracks to smaller video areas that 
-    // will be displayed on the right side.
+    // in a meeting with multiple peers, we want to add their remote media 
+    // tracks to smaller video areas that will be displayed on the right side.
     
     this.logEvent(`**** Track event triggering state change on main video area srcObject`)
     this._mainVideoArea.nativeElement.srcObject = event.streams[0]
@@ -278,10 +280,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this._meetingService.signal('timer', {
       meetingId: this._meetingID,
       clientId: id
-    })
-
-    // this.beginMeetingTimer()
-    
+    })    
   }
 
   private _handleICEConnectionStateChangeEvent(id: string): void {
@@ -295,13 +294,10 @@ export class MeetingComponent implements OnInit, OnDestroy {
         break
       case "closed":
       case "disconnected":
-        // this.isStreamingReady = false
         if (this._connections[id]) {
           this.endVideoConference()
           this.closeMeetingConnection()
         }
-        // trigger ice renegotiation while creating a new offer
-        // this._restartConnection(id)
         break
     }
   }
@@ -463,11 +459,25 @@ export class MeetingComponent implements OnInit, OnDestroy {
     }
   }
 
-  private _setFileUploadState(event: any): void {
-    this.isFileTransfering = event.data.isFileTransfering
+  private _setFileTransferState(event: any): void {
+    const id = event.data.clientId
+    this.isFileTransfering = event.data.transferInProgress
+    this.fileSize = event.data.file.size
+    this.selectedDataChannelId = id
+
+    const index = this.users.findIndex((user: IPayload) => user.clientId === id)
+
+    this._addMessage(index, event.data)
+
+    this._configureChatRoom(event.data, index)
   }
 
   public sendDataChannelMessage(): void {
+
+    if (!this.selectedDataChannelId) {
+      alert("Please select a user from the selection")
+      return
+    }
 
     const id = this.selectedDataChannelId
 
@@ -479,8 +489,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
       contentType: 'message',
       userType: this.userType, // client or host?
       timestamp: new Date(),
-      clientId: id,
-      messageThreadIndex: index
+      clientId: id
     }
 
     this._addMessage(index, message)
@@ -493,26 +502,68 @@ export class MeetingComponent implements OnInit, OnDestroy {
   private _handleDataChannelMessage(id: string, event: MessageEvent): void {
     this.logEvent(`**** DataChannel Message Received: ${event.data}`)
 
-    const message = JSON.parse(event.data)
-    this._toastrService.info(`New Message from ${message.sender} (${message.userType})`)
-    const index = this.users.findIndex((user: IPayload) => user.clientId === id)
-    
-    if (this.tabs.length !== this.users.length) {
-      this.tabs.push(this.users[index])
+    if (this.isFileTransfering) {
+
+      this._fileBuffer.push(event.data)
+
+      this.fileLoaded += event.data.byteLength
+
+      this.fileProgress = this._calculateFileTransferProgress(this.fileLoaded, this.fileSize)
+
+      console.log(this.fileProgress)
+
+      if (this.fileLoaded === this.fileSize) {
+
+        this.isFileTransfering = false
+
+        const file = new Blob(this._fileBuffer)
+
+        this._fileBuffer = []
+
+        return
+      }
+
+    } else {
+
+      const message = JSON.parse(event.data)
+      this._toastrService.info(`New Message from ${message.sender} (${message.userType})`)
+
+      const index = this.users.findIndex((user: IPayload) => user.clientId === id)
+
+      this._addMessage(index, message)
+
+      this._configureChatRoom(message, index)
+      this._cdr.detectChanges()
+
     }
 
+    this.isMessageTargetSelected = true
+  }
+
+  private _configureChatRoom(message: any, index: number): void {
+    
     if (!this.selectedDataChannelId) {
       this.selectedDataChannelId = message.clientId
     }
 
-    this._addMessage(index, message)
+    if (this.tabs.length !== this.users.length) {
+      this.tabs.push(this.users[index])
+    }
 
     this.selectedUser.setValue(index)
-    this.isMessageTargetSelected = true
-    this._cdr.detectChanges()
+  }
+
+  private _calculateFileTransferProgress(loaded: number, total: number): number {
+    return Math.round(loaded / total * 100)
+
   }
 
   public sendDataChannelFile(changeEvent: any): void {
+
+    if (!this.selectedDataChannelId) {
+      alert("Please select a user from the selection")
+      return
+    }
 
     if (!changeEvent.target.files) {
       return
@@ -527,35 +578,26 @@ export class MeetingComponent implements OnInit, OnDestroy {
     const message = {
       sender: this.userName,
       body: "File Transfer",
+      contentType: 'file',
       file: {
         name: file.name,
-        size: file.size,
+        size: file.size
       },
-      contentType: 'file',
       userType: this.userType,
       clientId: id,
-      messageThreadIndex: index,
       timestamp: new Date()
     }
 
-    const payload = JSON.stringify(message)
-
-    // this.messages[index].push(message)
     this._addMessage(index, message)
-
-    // this._dataChannels[id].send(payload)
 
     // tell the targeted participant that a file sharing operation is in progress
     this._meetingService.signal('filetransfer', {
       meetingId: this._meetingID,
-      member: this.userName,
-      filename: file.name,
-      filesize: file.size,
-      isUpload: true,
       roomId: user.roomId,
+      member: this.userName,
       mode: 'transfer',
       data: {
-        payload: payload,
+        ...message,
         transferInProgress: true
       },
       sender: this.oppositeUserType
@@ -571,6 +613,9 @@ export class MeetingComponent implements OnInit, OnDestroy {
         if (file.size > (offset + event.target.result.byteLength)) {
           setTimeout(sliceFile, 0, (offset + chunkSize))
         }
+
+        this.fileProgress = this._calculateFileTransferProgress((offset + event.target.result.byteLength), file.size)
+
       }
 
       const slice = file.slice(offset, (offset + chunkSize))
@@ -610,7 +655,6 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
         that._stopTracks(id)
 
-        // this._connections[id].getTransceivers().forEach((track: RTCRtpTransceiver) => track.stop())
         that._connections[id].close()
         that._dataChannels[id].close()
         that._connections[id] = null
@@ -966,22 +1010,13 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this._logError(`Error ${message.name}: ${message.message}`)
   }
 
-  // @HostListener('window:beforeunload')
   ngOnDestroy() {
-
-    // if (Object.values(this._connections).length) {
-    //   this.closeMeeting()
-    //   this._resetMeetingRoom(this.selectedConnectionId)
-    // }
-
     this.endVideoConference()
-
-    this.destroy$.next(false)
-    this.destroy$.unsubscribe()
+    this._destroy$.next(false)
+    this._destroy$.unsubscribe()
     this._closeConference$.next(false)
     this._closeConference$.unsubscribe()
     this._displayControls$.next(false)
     this._displayControls$.unsubscribe()
-    
   }
 }

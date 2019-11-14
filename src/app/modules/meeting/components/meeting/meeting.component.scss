@@ -33,7 +33,7 @@ h2 {
 
 
 
-// Meeting Indeterminate progres bar Styles
+// Meeting progres bar Styles
 .meeting-progress-container {
     display: flex;
     height: 100%;
@@ -55,11 +55,10 @@ h2 {
     width: 100%;
 }
 
-.mat-progress-bar {
+.mat-progress-bar, .progress-bar {
     height: 15px;
     border-radius: 5px;
 }
-
 
 
 
