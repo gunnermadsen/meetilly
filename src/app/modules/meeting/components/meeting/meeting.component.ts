@@ -14,10 +14,13 @@ import { MeetingService } from '@/modules/meeting/services/meeting.service'
 import { IPayload } from '@/modules/main/models/payload.model'
 import { MatSelectChange, MatTableDataSource } from '@angular/material'
 import { DataChannelConnections, WebcamStreams, DisplayStreams, PeerConnections } from '@/modules/meeting/models/meeting.model'
-import { Store } from '@ngrx/store'
+import { Store, select } from '@ngrx/store'
 import { AppState } from '@/reducers'
 import { setMeetingViewState } from '@/modules/main/store/actions/meeting.actions'
 import { IUser } from '@/modules/meeting/models/users.model'
+import { IMessage } from '../../models/message.model';
+import { createMessage } from '../../store/actions/message.actions';
+import { selectMessages } from '../../store/selectors/message.selectors';
 
 @Component({
   selector: 'app-meeting',
@@ -43,7 +46,6 @@ export class MeetingComponent implements OnInit, OnDestroy {
   private _webcamStreams: WebcamStreams = {}
   private _displayStreams: DisplayStreams = {}
   private _connections: PeerConnections = {}
-  // private _connectionMap: Map<Symbol, RTCPeerConnection> = new Map<Symbol, RTCPeerConnection>()
   public speakerList: MediaDeviceInfo[] = []
   public cameraList: MediaDeviceInfo[]
   public microphoneList: MediaDeviceInfo[]
@@ -55,7 +57,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
   public displayedColumns: string[] = ['name', 'type', 'clientId']
   public userType: string = null
   public oppositeUserType: string = null
-  public messages: any[] = []
+  public messages$: Observable<IMessage[]>
   public users: IUser[] = []
   public tabs: IPayload[] = []
   public selectedDataChannelId: string
@@ -102,6 +104,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
   
   ngOnInit() {
     this._listenForReadyEvent()
+    // this._meetingService.listenForReadyEvent()
   }
 
   private _listenForReadyEvent(): void {
@@ -415,7 +418,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
         this._meetingService.signal('signal', {
           meetingId: this._meetingID,
-          roomId: message.roomId, //this._findRoomIdUsingClientId(id),
+          roomId: message.roomId,
           clientId: id,
           member: this.userName,
           mode: "answer",
@@ -460,14 +463,13 @@ export class MeetingComponent implements OnInit, OnDestroy {
   }
 
   private _setFileTransferState(event: any): void {
-    const id = event.data.clientId
     this.isFileTransfering = event.data.transferInProgress
     this.fileSize = event.data.file.size
-    this.selectedDataChannelId = id
+    this.selectedDataChannelId = event.data.clientId
 
-    const index = this.users.findIndex((user: IPayload) => user.clientId === id)
+    const index = this.users.findIndex((user: IPayload) => user.clientId === event.data.clientId)
 
-    this._addMessage(index, event.data)
+    this._store$.dispatch(createMessage({ message: event.data }))
 
     this._configureChatRoom(event.data, index)
   }
@@ -479,36 +481,39 @@ export class MeetingComponent implements OnInit, OnDestroy {
       return
     }
 
-    const id = this.selectedDataChannelId
+    const index = this.users.findIndex((user: IPayload) => user.clientId === this.selectedDataChannelId)
 
-    const index = this.users.findIndex((user: IPayload) => user.clientId === id)
+    const message = this._generateMessage('message', this.messageArea.value)
 
-    const message = {
-      sender: this.userName, // the username of the participant sending the message
-      body: this.messageArea.value,
-      contentType: 'message',
-      userType: this.userType, // client or host?
-      timestamp: new Date(),
-      clientId: id
-    }
-
-    this._addMessage(index, message)
+    this._store$.dispatch(createMessage({ message: message }))
 
     this.messageArea.setValue("")
-    this._dataChannels[id].send(JSON.stringify(message))
+    this._dataChannels[this.selectedDataChannelId].send(JSON.stringify(message))
     this.logEvent(`**** DataChannel message sent: ${JSON.stringify(message)}`)
+  }
+
+  private _generateMessage(contentType: string, body: string, file?: any): IMessage {
+    return {
+      sender: this.userName, // the username of the participant sending the message
+      body: body,
+      contentType: contentType,
+      file: file ? file : null,
+      userType: this.userType, // client or host?
+      timestamp: new Date(),
+      clientId: this.selectedDataChannelId
+    }
   }
 
   private _handleDataChannelMessage(id: string, event: MessageEvent): void {
     this.logEvent(`**** DataChannel Message Received: ${event.data}`)
-
+    
     if (this.isFileTransfering) {
 
       this._fileBuffer.push(event.data)
 
       this.fileLoaded += event.data.byteLength
 
-      this.fileProgress = this._calculateFileTransferProgress(this.fileLoaded, this.fileSize)
+      // this.messages[] = this._calculateFileTransferProgress(this.fileLoaded, this.fileSize)
 
       console.log(this.fileProgress)
 
@@ -526,21 +531,18 @@ export class MeetingComponent implements OnInit, OnDestroy {
     } else {
 
       const message = JSON.parse(event.data)
-      this._toastrService.info(`New Message from ${message.sender} (${message.userType})`)
-
       const index = this.users.findIndex((user: IPayload) => user.clientId === id)
 
-      this._addMessage(index, message)
+      this._store$.dispatch(createMessage({ message: message }))
 
       this._configureChatRoom(message, index)
       this._cdr.detectChanges()
-
     }
 
     this.isMessageTargetSelected = true
   }
 
-  private _configureChatRoom(message: any, index: number): void {
+  private _configureChatRoom(message: IMessage, index: number): void {
     
     if (!this.selectedDataChannelId) {
       this.selectedDataChannelId = message.clientId
@@ -555,7 +557,6 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
   private _calculateFileTransferProgress(loaded: number, total: number): number {
     return Math.round(loaded / total * 100)
-
   }
 
   public sendDataChannelFile(changeEvent: any): void {
@@ -565,30 +566,15 @@ export class MeetingComponent implements OnInit, OnDestroy {
       return
     }
 
-    if (!changeEvent.target.files) {
-      return
-    }
+    if (!changeEvent.target.files) return
 
     const file: File = changeEvent.target.files[0]
     const id = this.selectedDataChannelId
     const chunkSize = 16384
-    const index = this.users.findIndex((user: IPayload) => user.clientId === id)
     const user = this.users.find((user: IUser) => user.clientId === id)
+    const message = this._generateMessage('file', "File Transfer", { name: file.name, size: file.size, progress: 0 })
 
-    const message = {
-      sender: this.userName,
-      body: "File Transfer",
-      contentType: 'file',
-      file: {
-        name: file.name,
-        size: file.size
-      },
-      userType: this.userType,
-      clientId: id,
-      timestamp: new Date()
-    }
-
-    this._addMessage(index, message)
+    this._store$.dispatch(createMessage({ message: message }))
 
     // tell the targeted participant that a file sharing operation is in progress
     this._meetingService.signal('filetransfer', {
@@ -625,43 +611,33 @@ export class MeetingComponent implements OnInit, OnDestroy {
     // this.fileTransfer = false
   }
 
-  private _addMessage(index: number, message: any): void {
-    if (this.messages.length) {
-      this.messages[index].push(message)
-    } else {
-      this.messages.push([message])
-    }
-  }
-
   private _handleDataChannelOnOpenEvent(id: string, roomId: string, event: any): void {
     if (this._dataChannels[id].readyState === 'open') {
       this.logEvent("Data Channel open")
       this._dataChannels[id].onmessage = this._handleDataChannelMessage.bind(this, id)
-      // this.messageToggle.enable()
+
+      this.messages$ = this._store$.pipe(
+        select(selectMessages(id)),
+        tap((messages: IMessage[]) => console.log(messages))
+      )
     }
   }
 
   public closeMeetingConnection(): void {
-
     if (this._connections[this.selectedConnectionId]) {
-      
       this.logEvent("**** Closing the peer connection and datachannel")
-
       const that = this
    
       this.users.forEach((user: IUser, index: number) => {
-
         const id = user.clientId
 
         that._stopTracks(id)
-
         that._connections[id].close()
         that._dataChannels[id].close()
         that._connections[id] = null
         that._dataChannels = null
         that._webcamStreams[id] = null
         that._displayStreams[id] = null
-
       })
     }
   }
@@ -715,7 +691,6 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
   private _hangupAndNotify(payload: IPayload): void {
     // simply want to notify the other members that the person has left the room
-
     if (this.users.length === 1) {
       this._resetMeetingRoom(payload.clientId)
     }
@@ -731,10 +706,8 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this._store$.dispatch(setMeetingViewState({ meetingViewState: false }))
 
     // ** TODO ** (Optional)
-    // if there are multiple meeting participants, 
-    // we could set the srcElement to the next available 
-    // participant, otherwise set the srcObject to null.
-    // more to come
+    // if there are multiple meeting participants, we could set the srcElement to the next available 
+    // participant, otherwise set the srcObject to null. more to come
 
     this._mainVideoArea.nativeElement.srcObject = null
     this._smallVideoArea.nativeElement.srcObject = null
@@ -742,8 +715,6 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this._videoContainer.nativeElement.style.display = 'none'
     this.isVideoConferenceMode = !this.isVideoConferenceMode
     this.isDashboardHidden = false
-
-    this._closeConference$.next(false)
   }
 
   private _stopTracks(id: string) {
@@ -901,11 +872,10 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this.logEvent(`**** Entering Video Conference mode`)
 
     this.isDashboardHidden = true
-
     this.selectedConnectionId = this.users[0].clientId
     const id = this.selectedConnectionId
-
     this._videoContainer.nativeElement.style.display = 'inline-block'
+
     this.getDeviceList()
 
     this._store$.dispatch(setMeetingViewState({ meetingViewState: true }))

@@ -6,6 +6,7 @@ import { SharedModule } from '@/shared/shared.module';
 import { MessageStylesDirective } from '../../shared/directives/message-styles/message-styles.directive';
 import { StoreModule } from '@ngrx/store';
 import { MeetingMap } from '../../reducers';
+import { MessageReducer } from './store/reducers/messages.reducer';
 
 
 @NgModule({

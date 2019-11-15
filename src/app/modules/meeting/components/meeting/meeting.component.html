@@ -35,7 +35,7 @@
                                     <!-- <mat-divider *ngIf="messages.length"> {{ messages[0].timestamp | date : 'EEE, h' }} </mat-divider> -->
                                 </div>
                                 <div class="message" 
-                                    *ngFor="let message of messages[i]; index as j" 
+                                    *ngFor="let message of messages$ | async; index as j" 
                                     meetingMessage 
                                     [userType]="message.userType"
                                     [contentType]="message.contentType"

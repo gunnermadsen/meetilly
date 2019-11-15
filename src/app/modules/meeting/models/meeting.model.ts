@@ -13,7 +13,3 @@ export interface WebcamStreams {
 export interface DisplayStreams {
     [id: string]: MediaStream
 }
-
-export interface IMessage {
-    [id: number]: any
-}
