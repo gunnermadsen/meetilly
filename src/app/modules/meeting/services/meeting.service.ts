@@ -1,34 +1,32 @@
-import { Injectable, ComponentRef } from '@angular/core';
-import { Socket } from 'ngx-socket-io';
-import { Observable, merge, Subject, BehaviorSubject } from 'rxjs';
-import { IPayload } from '../../main/models/payload.model';
-import { takeUntil, map, tap } from 'rxjs/operators';
-import { DataChannelConnections, WebcamStreams, DisplayStreams, PeerConnections } from '../models/meeting.model';
-import { ActivatedRoute } from '@angular/router';
+import { Injectable, ComponentRef } from '@angular/core'
+import { Observable, merge, Subject, BehaviorSubject, interval } from 'rxjs'
+import { IPayload } from '../../main/models/payload.model'
+import { takeUntil, map } from 'rxjs/operators'
+import { DataChannelConnections, WebcamStreams, DisplayStreams, PeerConnections } from '../models/meeting.model'
 import * as uuid from 'uuid'
-import { MeetingComponent } from '../components/meeting/meeting.component';
-import { Store } from '@ngrx/store';
-import { AppState } from '@/reducers';
-import { createMessage } from '../store/actions/message.actions';
-import { IMessage } from '../models/message.model';
-import { LoggerService } from './logger.service';
-import { ToastrService } from 'ngx-toastr';
-import { sizeConstraints } from '../components/meeting/constraints';
-import { IUser } from '../models/users.model';
-import { SocketService } from './socket.service';
-import { setMeetingViewState } from '@/modules/main/store/actions/meeting.actions';
+import { MeetingComponent } from '../components/meeting/meeting.component'
+import { Store } from '@ngrx/store'
+import { AppState } from '@/reducers'
+import { createMessage, updateFileTransferState } from '../store/actions/message.actions'
+import { IMessage, FileMessage } from '../models/message.model'
+import { LoggerService } from './logger.service'
+import { ToastrService } from 'ngx-toastr'
+import { sizeConstraints } from '../components/meeting/constraints'
+import { IUser } from '../models/users.model'
+import { SocketService } from './socket.service'
+import { setMeetingViewState } from '@/modules/main/store/actions/meeting.actions'
 
-@Injectable()
+@Injectable({ providedIn: 'root' })
 export class MeetingService {
 
     private _transferProgress$: Subject<number> = new Subject<number>()
     public get progress$(): Observable<number> {
         return this._transferProgress$.asObservable()
     }
-    public set progress(progress: number) {
-        this._transferProgress$.next(progress)
+    public set progress(value: number) {
+        this._transferProgress$.next(value)
     }
-
+    
 
     private _users$: BehaviorSubject<IUser[]> = new BehaviorSubject<IUser[]>([])
     public get users$(): Observable<IUser[]> {
@@ -37,63 +35,137 @@ export class MeetingService {
     public get users(): IUser[] {
         return this._users$.value
     }
-    public set user(payload: IUser) {
+    public set user(value: IUser) {
         const duplicates: IUser[] = this._users$.value.filter(
-            (user: IUser) => user.clientId === payload.clientId && user.member === payload.member
+            (user: IUser) => user.clientId === value.clientId && user.member === value.member
         )
 
         if (!duplicates.length) {
-            this._users$.next([...this.users, payload])
+            this._users$.next([...this.users, value])
         }
     }
 
+    /**
+     * BehaviorSubject for tracking the state of the video conference, 
+     * whether two or more meeting participatns are active in a meeting.
+     * Used as a declarative method of unsubscribing to observables
+     */
+    private _isVideoConferenceInactive$: Subject<boolean> = new Subject<boolean>()
+    public get isVideoConferenceInactive$(): Observable<boolean> {
+        return this._isVideoConferenceInactive$.asObservable()
+    }
+    public set isVideoConferenceInactive(value: boolean) {
+        this._isVideoConferenceInactive$.next(value)
+    }
+    
+
+    private _timeCounter$: BehaviorSubject<number> = new BehaviorSubject<number>(null)
+    public get timeCounter$(): Observable<number> {
+        return this._timeCounter$.asObservable()
+    }
+    public set timeCounter(value: number) {
+        this._timeCounter$.next(value)
+    }
+
+
     private _destroy$: Subject<boolean> = new Subject<boolean>()
+    public get destroy(): Subject<boolean> {
+        return this._destroy$
+    }
+    public set destroyState(value: boolean) {
+        this._destroy$.next(value)
+    }
+
+
+    private _isStreamingReady: BehaviorSubject<boolean> = new BehaviorSubject<boolean>(false)
+    public get isStreamingReady(): BehaviorSubject<boolean> {
+        return this._isStreamingReady
+    }
+    public get isStreamingReady$(): Observable<boolean> {
+        return this._isStreamingReady.asObservable()
+    }
+
+
+    private _mainVideoArea: BehaviorSubject<MediaStream> = new BehaviorSubject<MediaStream>(null)
+    public get mainVideoArea$(): Observable<MediaStream> {
+        return this._mainVideoArea.asObservable()
+    }
+    public set mainVideo(value: MediaStream) {
+        this._mainVideoArea.next(value)
+    }
+
+
+    private _smallVideoArea: BehaviorSubject<MediaStream> = new BehaviorSubject<MediaStream>(null)
+    public get smallVideoArea$(): Observable<MediaStream> {
+        return this._smallVideoArea.asObservable()
+    }
+    public set smallVideo(stream: MediaStream) {
+        this._smallVideoArea.next(stream)
+    }
+
+    private _isSharingScreen: BehaviorSubject<boolean> = new BehaviorSubject<boolean>(false)
+    public get isSharingScreenMode(): boolean {
+        return this._isSharingScreen.value
+    }
+    public set isSharingScreen(value: boolean) {
+        this._isSharingScreen.next(value)
+    }
+   
     private _componentRef: ComponentRef<MeetingComponent>
     public dataChannels: DataChannelConnections = {}
     public webcamStreams: WebcamStreams = {}
     public displayStreams: DisplayStreams = {}
     public connections: PeerConnections = {}
-    // private _connectionMap: Map<Symbol, RTCPeerConnection> = new Map<Symbol, RTCPeerConnection>()
-    public speakerList: MediaDeviceInfo[] = []
+    // private _connectionMap: Map<Symbol, BehaviorSubject<RTCPeerConnection>> = new Map<Symbol, BehaviorSubject<RTCPeerConnection>>()
+    public speakerList: MediaDeviceInfo[]
     public cameraList: MediaDeviceInfo[]
     public microphoneList: MediaDeviceInfo[]
     private selectedConnectionId: string
     public get connectionId(): string {
         return this.selectedConnectionId
     }
-    public set connectionId(id: string) {
-        this.selectedConnectionId = id
+    public set connectionId(value: string) {
+        this.selectedConnectionId = value
     }
 
     private selectedDataChannelId: string
     public get channelId(): string {
         return this.selectedDataChannelId
     }
-
-    public set channelId(id: string) {
-        this.selectedDataChannelId = id
+    public set channelId(value: string) {
+        this.selectedDataChannelId = value
     }
 
     private _meetingID: number = null
     public userName: string = null
     public userType: string = null
-    private _connectionId: string
+    private readonly _connectionId: string = uuid.v4()
+    public get clientConnectionID(): string {
+        return this._connectionId
+    }
+
     public meetingData: any = null
     public oppositeUserType: "guest" | "host" = null
-    isSharingScreen: any;
+    public isFileTransfering: boolean = false
 
-    private _fileBuffer: ArrayBuffer[] = []
+    private _tabs: IPayload[] = []
+    public get tabs(): IPayload[] {
+        return this._tabs
+    }
+    public set tab(tab: IPayload) {
+        this._tabs.push(tab)
+    }
 
+    constructor(private _toastrService: ToastrService, private _loggerService: LoggerService, private _store$: Store<AppState>, private _socketService: SocketService) {
+        this._loggerService.logEvent("Meeting Service Constructed")
+    }
 
-    constructor(private _toastrService: ToastrService, private _loggerService: LoggerService, private _route: ActivatedRoute, private _store$: Store<AppState>, private _socketService: SocketService) {}
+    public initializeMeetingParams(snapshot: any): void {
+        this.meetingData = snapshot.data.result[0]
 
-    public initializeMeetingParams(): void {
-        this._connectionId = uuid.v4()
-        this.meetingData = this._route.snapshot.data.result[0]
-
-        this._meetingID = this._route.snapshot.queryParams.meetingId
-        this.userName = this._route.snapshot.queryParams.member
-        this.userType = this._route.snapshot.queryParams.mode
+        this._meetingID = snapshot.queryParams.meetingId
+        this.userName = snapshot.queryParams.member
+        this.userType = snapshot.queryParams.mode
         this.oppositeUserType = this.userType === 'host' ? 'guest' : 'host'
     }
 
@@ -192,7 +264,7 @@ export class MeetingService {
                 break
 
             case "starttimer":
-                this._componentRef.instance.beginMeetingTimer()
+                this._beginMeetingTimer()
                 break
 
             default:
@@ -205,7 +277,7 @@ export class MeetingService {
 
         this._loggerService.logEvent(`**** Creating New RTC Peer Connection for ${this.userType}`)
 
-        this._componentRef.instance.isStreamingReady = true
+        this.isStreamingReady.next(true)
 
         const roomId = payload.roomId
         const id = payload.clientId
@@ -261,7 +333,8 @@ export class MeetingService {
         // tracks to smaller video areas that will be displayed on the right side.
 
         this._loggerService.logEvent(`**** Track event triggering state change on main video area srcObject`)
-        this._componentRef.instance.mainVideoArea.nativeElement.srcObject = event.streams[0]
+        
+        this.mainVideo = event.streams[0]
 
         this._socketService.signal('timer', {
             meetingId: this._meetingID,
@@ -483,10 +556,10 @@ export class MeetingService {
         }
 
         if (this.tabs.length !== this.users.length) {
-            this.tabs.push(this.users[index])
+            this.tab = this.users[index]
         }
 
-        this.selectedUser.setValue(index)
+        this._componentRef.instance.selectedUser.setValue(index)
     }
 
     public sendDataChannelFile(changeEvent: any): void {
@@ -540,30 +613,35 @@ export class MeetingService {
     }
 
     private _handleDataChannelMessage(id: string, event: MessageEvent): void {
-        this._loggerService.logEvent(`**** DataChannel Message Received: ${event.data}`)
 
         if (this.isFileTransfering) {
 
-            this._fileBuffer.push(event.data)
+            const payload: FileMessage = {
+                progress: event.data.byteLength,
+                buffer: event.data
+            }
 
-            this.fileLoaded += event.data.byteLength
+            this._store$.dispatch(updateFileTransferState({ fileData: payload }))
+            return
+            // this._fileBuffer.push(event.data)
+
+            // this.fileLoaded += event.data.byteLength
 
             // this.messages[] = this._calculateFileTransferProgress(this.fileLoaded, this.fileSize)
 
-            console.log(this.fileProgress)
+            // if (this.fileLoaded === this.fileSize) {
 
-            if (this.fileLoaded === this.fileSize) {
+            //     this.isFileTransfering = false
 
-                this.isFileTransfering = false
+            //     const file = new Blob(this._fileBuffer)
 
-                const file = new Blob(this._fileBuffer)
+            //     this._fileBuffer = []
 
-                this._fileBuffer = []
-
-                return
-            }
+            //     return
+            // }
 
         } else {
+            this._loggerService.logEvent(`**** DataChannel Message Received: ${event.data}`)
 
             const message = JSON.parse(event.data)
             const index = this.users.findIndex((user: IPayload) => user.clientId === id)
@@ -573,7 +651,7 @@ export class MeetingService {
             this._configureChatRoom(message, index)
         }
 
-        this.isMessageTargetSelected = true
+        // this.isMessageTargetSelected = true
     }
 
     private _handleDataChannelOnOpenEvent(id: string, roomId: string, event: any): void {
@@ -584,9 +662,11 @@ export class MeetingService {
     }
 
     private _setFileTransferState(event: any): void {
+
         this.isFileTransfering = event.data.transferInProgress
-        this.fileSize = event.data.file.size
-        this.selectedDataChannelId = event.data.clientId
+        // this.fileSize = event.data.file.size
+
+        this.channelId = event.data.clientId
 
         const index = this.users.findIndex((user: IPayload) => user.clientId === event.data.clientId)
 
@@ -633,7 +713,7 @@ export class MeetingService {
                 const id = user.clientId
 
                 that.stopTracks(id)
-                that.connections[id].close()
+                that.connections[id].close() 
                 that.dataChannels[id].close()
                 that.connections[id] = null
                 that.dataChannels = null
@@ -655,12 +735,8 @@ export class MeetingService {
         // if there are multiple meeting participants, we could set the srcElement to the next available 
         // participant, otherwise set the srcObject to null. more to come
 
-        this._componentRef.instance.mainVideoArea.nativeElement.srcObject = null
-        this._componentRef.instance.smallVideoArea.nativeElement.srcObject = null
-
-        this._componentRef.instance.videoContainer.nativeElement.style.display = 'none'
-        this.isVideoConferenceMode = !this.isVideoConferenceMode
-        this.isDashboardHidden = false
+        this.isVideoConferenceInactive = true
+        
     }
 
     public async getDeviceList(): Promise<void> {
@@ -678,7 +754,7 @@ export class MeetingService {
         if (this.webcamStreams[id]) {
             this.webcamStreams[id].getTracks().forEach((track: MediaStreamTrack) => track.stop())
 
-            if (this.isSharingScreen) {
+            if (this.isSharingScreenMode) {
                 this.displayStreams[id].getTracks().forEach((track: MediaStreamTrack) => track.stop())
                 this.isSharingScreen = false
             }
@@ -709,9 +785,10 @@ export class MeetingService {
     public async configureVideoConferenceMode(): Promise<void> {
         this._loggerService.logEvent(`**** Entering Video Conference mode`)
 
+        this.isVideoConferenceInactive = false
+
         this.selectedConnectionId = this.users[0].clientId
         const id = this.selectedConnectionId
-        this._componentRef.instance.videoContainer.nativeElement.style.display = 'inline-block'
 
         this.getDeviceList()
 
@@ -721,22 +798,29 @@ export class MeetingService {
             this.webcamStreams[id] = await navigator.mediaDevices.getUserMedia({ audio: true, video: sizeConstraints })
 
             this._loggerService.logEvent(`---> Acquired user media for ${this.oppositeUserType}`)
-            this._componentRef.instance.smallVideoArea.nativeElement.srcObject = this.webcamStreams[id]
 
+            this.smallVideo = this.webcamStreams[id]
             this._addTracksToConnection(this.webcamStreams[id], id)
-
 
         } catch (error) {
             this._handleGetUserMediaError(error)
         }
     }
 
+    private _beginMeetingTimer(): void {
+        interval(1000).pipe(
+            map((time: number) => this.timeCounter = (time * 1000)),
+            // takeUntil(this.isVideoConferenceInactive$)
+        ).subscribe()
+    }
+
     public async configureScreenSharingMode(): Promise<void> {
 
         const id = this.selectedConnectionId
+
         this._loggerService.logEvent(`**** Entering Screen Sharing Mode`)
 
-        if (this.isSharingScreen) {
+        if (this.isSharingScreenMode) {
             this._switchTracks(this.webcamStreams[id], id, "video")
             this.displayStreams[id].getTracks().forEach((track: MediaStreamTrack) => track.stop())
             this.isSharingScreen = false
@@ -747,8 +831,9 @@ export class MeetingService {
             this.displayStreams[id] = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
             this._loggerService.logEvent(`---> Display media has been set`)
 
-            this._switchTracks(this.displayStreams[id], id, "video")
             this.isSharingScreen = true
+
+            this._switchTracks(this.displayStreams[id], id, "video")
         } catch (error) {
             this._loggerService.logError(error)
         }
@@ -815,8 +900,8 @@ export class MeetingService {
             this.webcamStreams[id] = await navigator.mediaDevices.getUserMedia(constraints)
 
             switch (type) {
-                case "audiooutput" || "audio":
                 case "audioinput":
+                case "audiooutput" || "audio":
                     track = this.webcamStreams[id].getAudioTracks()[0]
                     break
                 case "videoinput":

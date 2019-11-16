@@ -3,7 +3,7 @@ import { Socket } from 'ngx-socket-io';
 import { Observable } from 'rxjs';
 import { IPayload } from '@/modules/main/models/payload.model';
 
-@Injectable()
+@Injectable({ providedIn: 'root' })
 export class SocketService {
     public signal$: Observable<any> = this._socket.fromEvent<any>('signal')
     public ready$: Observable<any> = this._socket.fromEvent<any>('ready')
