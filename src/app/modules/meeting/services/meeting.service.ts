@@ -26,7 +26,6 @@ export class MeetingService {
     public set progress(value: number) {
         this._transferProgress$.next(value)
     }
-    
 
     private _users$: BehaviorSubject<IUser[]> = new BehaviorSubject<IUser[]>([])
     public get users$(): Observable<IUser[]> {
@@ -42,6 +41,8 @@ export class MeetingService {
 
         if (!duplicates.length) {
             this._users$.next([...this.users, value])
+        } else {
+            return
         }
     }
 
@@ -50,12 +51,12 @@ export class MeetingService {
      * whether two or more meeting participatns are active in a meeting.
      * Used as a declarative method of unsubscribing to observables
      */
-    private _isVideoConferenceInactive$: Subject<boolean> = new Subject<boolean>()
-    public get isVideoConferenceInactive$(): Observable<boolean> {
-        return this._isVideoConferenceInactive$.asObservable()
+    private _isVideoConferenceActive$: Subject<boolean> = new Subject<boolean>()
+    public get isVideoConferenceActive$(): Observable<boolean> {
+        return this._isVideoConferenceActive$.asObservable()
     }
-    public set isVideoConferenceInactive(value: boolean) {
-        this._isVideoConferenceInactive$.next(value)
+    public set isVideoConferenceActive(value: boolean) {
+        this._isVideoConferenceActive$.next(value)
     }
     
 
@@ -110,7 +111,15 @@ export class MeetingService {
     public set isSharingScreen(value: boolean) {
         this._isSharingScreen.next(value)
     }
-   
+
+    private _selectedChatroomUser: Subject<number> = new Subject<number>()
+    public get selectedChatroomUser$(): Observable<number> {
+        return this._selectedChatroomUser.asObservable()
+    }
+    public set selectedChatroomUser(value: number) {
+        this._selectedChatroomUser.next(value)
+    }
+
     private _componentRef: ComponentRef<MeetingComponent>
     public dataChannels: DataChannelConnections = {}
     public webcamStreams: WebcamStreams = {}
@@ -145,7 +154,13 @@ export class MeetingService {
     }
 
     public meetingData: any = null
-    public oppositeUserType: "guest" | "host" = null
+    private _oppositeUserType: string = null
+    public get oppositeUserType(): string {
+        return this._oppositeUserType
+    }
+    public set oppositeUserType(value: string) {
+        this._oppositeUserType = value
+    }
     public isFileTransfering: boolean = false
 
     private _tabs: IPayload[] = []
@@ -153,7 +168,15 @@ export class MeetingService {
         return this._tabs
     }
     public set tab(tab: IPayload) {
-        this._tabs.push(tab)
+        const duplicates: IUser[] = this.tabs.filter(
+            (user: IUser) => user.clientId === tab.clientId && user.member === tab.member
+        )
+
+        if (!duplicates.length) {
+            this._tabs.push(tab)
+        } else {
+            return
+        }
     }
 
     constructor(private _toastrService: ToastrService, private _loggerService: LoggerService, private _store$: Store<AppState>, private _socketService: SocketService) {
@@ -292,7 +315,7 @@ export class MeetingService {
             ]
         })
 
-        this.dataChannels[id] = this.connections[id].createDataChannel("messageChannel")
+        this.dataChannels[id] = this.connections[id].createDataChannel(id)
 
         this.dataChannels[id].onopen = this._handleDataChannelOnOpenEvent.bind(this, id, roomId)
         this.connections[id].ondatachannel = this._handleDataChannelEvent.bind(this, id, roomId)
@@ -522,19 +545,20 @@ export class MeetingService {
 
     public sendDataChannelMessage(content: string): void {
 
-        if (!this.selectedDataChannelId) {
-            alert("Please select a user from the selection")
+        // const index = this.users.findIndex((user: IPayload) => user.clientId === this.channelId)
+        if (this.dataChannels[this.channelId].readyState !== 'open') {
+            alert("Unable to send your message at this time, please try again later")
             return
         }
 
-        const index = this.users.findIndex((user: IPayload) => user.clientId === this.selectedDataChannelId)
-
         const message = this._generateMessage('message', content)
+        
+        const payload = JSON.stringify(message)
+        
+        this.dataChannels[this.channelId].send(payload)
 
         this._store$.dispatch(createMessage({ message: message }))
-
-        this.dataChannels[this.selectedDataChannelId].send(JSON.stringify(message))
-        this._loggerService.logEvent(`**** DataChannel message sent: ${JSON.stringify(message)}`)
+        this._loggerService.logEvent(`**** DataChannel message sent: ${payload}`)
     }
 
     private _generateMessage(contentType: string, body: string, file?: any): IMessage {
@@ -545,21 +569,27 @@ export class MeetingService {
             file: file ? file : null,
             userType: this.userType, // client or host?
             timestamp: new Date(),
-            clientId: this.selectedDataChannelId
+            clientId: this.channelId
         }
     }
 
-    private _configureChatRoom(message: IMessage, index: number): void {
+    private _configureChatRoom(message: IMessage, id: string): void {
 
-        if (!this.selectedDataChannelId) {
-            this.selectedDataChannelId = message.clientId
+        const index = this.users.findIndex((user: IPayload) => user.clientId === id)
+
+        // Note on this condition: if there are multiple users in a meeting, 
+        // even if the selected channel id changes, the channelId property 
+        // will stil be set, 
+        if (!this.channelId) {
+            this.channelId = message.clientId
+            this.selectedChatroomUser = index
         }
+
 
         if (this.tabs.length !== this.users.length) {
             this.tab = this.users[index]
         }
 
-        this._componentRef.instance.selectedUser.setValue(index)
     }
 
     public sendDataChannelFile(changeEvent: any): void {
@@ -642,13 +672,14 @@ export class MeetingService {
 
         } else {
             this._loggerService.logEvent(`**** DataChannel Message Received: ${event.data}`)
-
             const message = JSON.parse(event.data)
-            const index = this.users.findIndex((user: IPayload) => user.clientId === id)
 
             this._store$.dispatch(createMessage({ message: message }))
 
-            this._configureChatRoom(message, index)
+            this._toastrService.info(`New message from ${message.sender} (${message.userType})`)
+
+
+            this._configureChatRoom(message, id)
         }
 
         // this.isMessageTargetSelected = true
@@ -656,7 +687,7 @@ export class MeetingService {
 
     private _handleDataChannelOnOpenEvent(id: string, roomId: string, event: any): void {
         if (this.dataChannels[id].readyState === 'open') {
-            this._loggerService.logEvent("Data Channel open")
+            this._loggerService.logEvent("**** Data Channel ready state has changed to open")
             this.dataChannels[id].onmessage = this._handleDataChannelMessage.bind(this, id)
         }
     }
@@ -668,11 +699,9 @@ export class MeetingService {
 
         this.channelId = event.data.clientId
 
-        const index = this.users.findIndex((user: IPayload) => user.clientId === event.data.clientId)
-
         this._store$.dispatch(createMessage({ message: event.data }))
 
-        this._configureChatRoom(event.data, index)
+        this._configureChatRoom(event.data, this.channelId)
     }
 
     private _hangupAndNotify(payload: IPayload): void {
@@ -686,7 +715,7 @@ export class MeetingService {
     public endVideoConference(): void {
         this._loggerService.logEvent("**** Closing the videoconference")
 
-        const user = this.users.find((user: IUser) => user.clientId === this.selectedConnectionId)
+        const user = this.users.find((user: IUser) => user.clientId === this.connectionId)
 
         // if there is only one other user, close the meeting entirely
         if (this.users.length === 1) {
@@ -705,7 +734,7 @@ export class MeetingService {
     }
 
     public closeMeetingConnection(): void {
-        if (this.connections[this.selectedConnectionId]) {
+        if (this.connections[this.connectionId]) {
             this._loggerService.logEvent("**** Closing the peer connection and datachannel")
             const that = this
 
@@ -735,7 +764,7 @@ export class MeetingService {
         // if there are multiple meeting participants, we could set the srcElement to the next available 
         // participant, otherwise set the srcObject to null. more to come
 
-        this.isVideoConferenceInactive = true
+        this.isVideoConferenceActive = false
         
     }
 
@@ -762,11 +791,11 @@ export class MeetingService {
     }
 
     public muteMicrophone(): void {
-        this.webcamStreams[this.selectedConnectionId].getAudioTracks()[0].enabled = !this.webcamStreams[this.selectedConnectionId].getAudioTracks()[0].enabled
+        this.webcamStreams[this.connectionId].getAudioTracks()[0].enabled = !this.webcamStreams[this.connectionId].getAudioTracks()[0].enabled
     }
 
     public disableVideoCamera(): void {
-        this.webcamStreams[this.selectedConnectionId].getVideoTracks().map((stream: MediaStreamTrack) => stream.enabled = !stream.enabled)
+        this.webcamStreams[this.connectionId].getVideoTracks().map((stream: MediaStreamTrack) => stream.enabled = !stream.enabled)
     }
 
     private _switchTracks(stream: MediaStream, id: string, mode: string): void {
@@ -776,19 +805,14 @@ export class MeetingService {
     }
 
     private _addTracksToConnection(stream: MediaStream, id: string): void {
-        stream.getTracks().forEach((track: MediaStreamTrack) => {
-            this.connections[id].addTrack(track, stream)
-            this._loggerService.logEvent(`---> Added track: ${track.label} to connection`)
-        })
+        stream.getTracks().forEach((track: MediaStreamTrack) => this.connections[id].addTrack(track, stream))
     }
 
     public async configureVideoConferenceMode(): Promise<void> {
         this._loggerService.logEvent(`**** Entering Video Conference mode`)
 
-        this.isVideoConferenceInactive = false
-
-        this.selectedConnectionId = this.users[0].clientId
-        const id = this.selectedConnectionId
+        this.connectionId = this.users[0].clientId
+        const id = this.connectionId
 
         this.getDeviceList()
 
@@ -810,13 +834,13 @@ export class MeetingService {
     private _beginMeetingTimer(): void {
         interval(1000).pipe(
             map((time: number) => this.timeCounter = (time * 1000)),
-            // takeUntil(this.isVideoConferenceInactive$)
+            takeUntil(this.isVideoConferenceActive$)
         ).subscribe()
     }
 
     public async configureScreenSharingMode(): Promise<void> {
 
-        const id = this.selectedConnectionId
+        const id = this.connectionId
 
         this._loggerService.logEvent(`**** Entering Screen Sharing Mode`)
 
@@ -857,7 +881,7 @@ export class MeetingService {
 
     public async configureCallType(type: string): Promise<void> {
 
-        const id = this.selectedConnectionId
+        const id = this.connectionId
 
         return
 
@@ -894,7 +918,7 @@ export class MeetingService {
     public async changeDevice(type: string, constraints: any): Promise<void> {
 
         let track: MediaStreamTrack
-        const id = this.selectedConnectionId
+        const id = this.connectionId
 
         try {
             this.webcamStreams[id] = await navigator.mediaDevices.getUserMedia(constraints)

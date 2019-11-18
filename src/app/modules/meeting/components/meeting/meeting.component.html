@@ -13,7 +13,7 @@
                         <mat-label>Members</mat-label>
                         <mat-select (selectionChange)="setSelectedUser($event)" [formControl]="selectedUser">
                             <mat-option [value]="100" [disabled]="true">Select a user</mat-option>
-                            <mat-option [value]="i" *ngFor="let user of users; index as i" > <!-- [disabled]="user.userType === type" -->
+                            <mat-option [value]="i" *ngFor="let user of users$ | async; index as i" > <!-- [disabled]="user.userType === type" -->
                                 {{ user.member }} ({{ user.sender }})
                             </mat-option>
                         </mat-select>
@@ -29,13 +29,13 @@
                                     <button mat-icon-button class="tab-label" (click)="closeTab($event, i)"><mat-icon>close</mat-icon></button>
                                 </div>
                             </ng-template>
-                            <div class="messages">
+                            <div class="messages" id="messages">
                                 <div class="header">
                                     <!-- Display a weekday and time when the conversation was started -->
                                     <!-- <mat-divider *ngIf="messages.length"> {{ messages[0].timestamp | date : 'EEE, h' }} </mat-divider> -->
                                 </div>
                                 <div class="message" 
-                                    *ngFor="let message of getMessages$(tab.clientId) | async; index as j" 
+                                    *ngFor="let message of messages$ | async; index as j" 
                                     meetingMessage 
                                     [userType]="message.userType"
                                     [contentType]="message.contentType"
@@ -75,7 +75,7 @@
                     <div class="message-form">
                         <mat-form-field appearance="outline">
                             <mat-label>Send a message</mat-label>
-                            <textarea [formControl]="messageArea" matInput cdkTextareaAutosize #autosize="cdkTextareaAutosize" cdkAutosizeMinRows="1" cdkAutosizeMaxRows="10"></textarea>
+                            <textarea [formControl]="messageArea" matInput cdkTextareaAutosize #autosize="cdkTextareaAutosize" cdkAutosizeMinRows="1" cdkAutosizeMaxRows="10" (click)="$event.preventDefault()"></textarea>
                         </mat-form-field>
                     </div>
                     <button mat-mini-fab color="primary" (click)="sendDataChannelMessage($event)"><mat-icon>arrow_upward</mat-icon></button>
@@ -156,7 +156,7 @@
                     </div>
                 </div>
                 <div class="screenshare-controls" *ngIf="displayControls$ | async">
-                    <button mat-fab matTooltip="Share you screen" [matTooltipPosition]="'right'" color="primary" class="screenshare-control" (click)="configureScreenSharingMode($event)">
+                    <button mat-fab matTooltip="Share you screen" matTooltipClass="tooltip-font-size" [matTooltipPosition]="'right'" color="primary" class="screenshare-control" (click)="configureScreenSharingMode($event)">
                         <mat-icon *ngIf="!isScreenSharing">screen_share</mat-icon>
                         <mat-icon *ngIf="isScreenSharing">stop_screen_share</mat-icon>
                     </button>
@@ -170,27 +170,27 @@
                     </button>
                 </div> -->
                 <div id="videoconference-controls" class="video-controls" *ngIf="displayControls$ | async">
-                    <button mat-fab matTooltip="Switch to a voice call" color="accent" class="control-phone" *ngIf="!isVoice" (click)="configureCallType('audio')">
+                    <button mat-fab matTooltip="Switch to a voice call" matTooltipClass="tooltip-font-size" color="accent" class="control-phone" *ngIf="!isVoice" (click)="configureCallType('audio')">
                         <mat-icon>phone</mat-icon>
                     </button>
-                    <button mat-fab matTooltip="Switch to a video call" color="accent" class="control-phone" *ngIf="isVoice" (click)="configureCallType('video')">
+                    <button mat-fab matTooltip="Switch to a video call" matTooltipClass="tooltip-font-size" color="accent" class="control-phone" *ngIf="isVoice" (click)="configureCallType('video')">
                         <mat-icon>switch_video</mat-icon>
                     </button>
-                    <button mat-fab matTooltip="Show the messenger" color="primary" class="control-message" (click)="snav.toggle()">
+                    <button mat-fab matTooltip="Show the messenger" matTooltipClass="tooltip-font-size" color="primary" class="control-message" (click)="snav.toggle()">
                         <mat-icon>chat_bubble_outline</mat-icon>
                     </button>
-                    <button mat-fab matTooltip="Disable video" color="warm" class="control-video" (click)="disableVideoCamera($event)">
+                    <button mat-fab matTooltip="Disable video" matTooltipClass="tooltip-font-size" color="warm" class="control-video" (click)="disableVideoCamera($event)">
                         <mat-icon *ngIf="!isPaused">videocam</mat-icon>
                         <mat-icon *ngIf="isPaused">videocam_off</mat-icon>
                     </button>
-                    <button mat-fab matTooltip="Mute the microphone" color="warm" class="control-microphone" (click)="muteMicrophone($event)">
+                    <button mat-fab matTooltip="Mute the microphone" matTooltipClass="tooltip-font-size" color="warm" class="control-microphone" (click)="muteMicrophone($event)">
                         <mat-icon *ngIf="!isMuted">mic</mat-icon>
                         <mat-icon *ngIf="isMuted">mic_off</mat-icon>
                     </button>
-                    <button id="hardware-menu" mat-fab matTooltip="Additional options" color="warm" [matMenuTriggerFor]="menu">
+                    <button id="hardware-menu" mat-fab matTooltip="Additional options" matTooltipClass="tooltip-font-size" color="warm" [matMenuTriggerFor]="menu">
                         <mat-icon>more_horiz</mat-icon>
                     </button>
-                    <button mat-fab matTooltip="End the call" color="warm" class="control-close" (click)="endVideoConference($event)">
+                    <button mat-fab matTooltip="End the call" matTooltipClass="tooltip-font-size" color="warm" class="control-close" (click)="endVideoConference($event)">
                         <mat-icon>call_end</mat-icon>
                     </button> 
                 </div>

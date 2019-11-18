@@ -2,18 +2,18 @@ import { Component, OnInit, ViewChild, ElementRef, OnDestroy, ViewChildren, Quer
 import { ActivatedRoute } from '@angular/router'
 import { FormControl } from '@angular/forms'
 
-import { takeUntil, tap, debounceTime, skipWhile } from 'rxjs/operators'
-import { Observable, fromEvent, BehaviorSubject, combineLatest } from 'rxjs'
+import { takeUntil, tap, debounceTime, skipWhile, endWith } from 'rxjs/operators'
+import { Observable, fromEvent, BehaviorSubject, combineLatest, iif, of } from 'rxjs'
 import adapter from 'webrtc-adapter'
-
 
 import { MeetingService } from '@/modules/meeting/services/meeting.service'
 import { MatSelectChange } from '@angular/material'
 import { Store, select } from '@ngrx/store'
 import { AppState } from '@/reducers'
 import { IUser } from '@/modules/meeting/models/users.model'
-import { IMessage } from '../../models/message.model';
-import { selectMessages } from '../../store/selectors/message.selectors';
+import { IMessage } from '../../models/message.model'
+import { selectMessages } from '../../store/selectors/message.selectors'
+import { IPayload } from '@/modules/main/models/payload.model'
 
 @Component({
   selector: 'app-meeting',
@@ -25,23 +25,12 @@ export class MeetingComponent implements OnInit, OnDestroy {
   @ViewChild('mainVideoArea', { static: false }) public mainVideoArea: ElementRef<HTMLVideoElement>
   @ViewChild('videoContainer', { static: false }) public videoContainer: ElementRef<HTMLElement>
   // @ViewChildren('remoteVideo') private _remoteVideoAreas: QueryList<ElementRef<HTMLVideoElement>>
-  @ViewChildren('downloadFile') public downloadFile: QueryList<ElementRef<HTMLAnchorElement>>
+  // @ViewChildren('downloadFile') public downloadFile: QueryList<ElementRef<HTMLAnchorElement>>
   private _displayControls$: BehaviorSubject<boolean> = new BehaviorSubject<boolean>(true)
   public get displayControls$(): Observable<boolean> {
     return this._displayControls$.asObservable()
   }
 
-  public selectedUser: FormControl = new FormControl()
-  public messageToggle: FormControl = new FormControl({ disabled: true })
-  public messageArea: FormControl = new FormControl()
-  public isVideoConferenceMode: boolean = false
-  public isDashboardHidden: boolean = false
-  public isMuted: boolean = false
-  public isPaused: boolean = false
-  public isSharingScreen: boolean = false
-  public isMessageTargetSelected: boolean = false
-  public isVoice: boolean = false
-  private _connectionId: string
   public get isStreamingReady$(): Observable<boolean> {
     return this._meetingService.isStreamingReady$
   }
@@ -64,7 +53,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
   }
 
   public get closeConference$(): Observable<boolean> {
-    return this._meetingService.isVideoConferenceInactive$
+    return this._meetingService.isVideoConferenceActive$
   }
 
   public get isScreenSharing(): boolean {
@@ -83,6 +72,27 @@ export class MeetingComponent implements OnInit, OnDestroy {
     return this._meetingService.speakerList
   }
 
+  public get tabs(): IPayload[] {
+    return this._meetingService.tabs
+  }
+
+  public selectedUser: FormControl = new FormControl()
+  public messageToggle: FormControl = new FormControl({ disabled: true })
+  public messageArea: FormControl = new FormControl()
+  public messages$: Observable<IMessage[]>
+  public isVideoConferenceMode: boolean = false
+  public isDashboardHidden: boolean = false
+  public isMuted: boolean = false
+  public isPaused: boolean = false
+  public isSharingScreen: boolean = false
+  public isMessageTargetSelected: boolean = false
+  public isVoice: boolean = false
+  private _connectionId: string
+
+  public get oppositeUserType() {
+    return this._meetingService.oppositeUserType
+  }
+
   constructor(private _meetingService: MeetingService, private _store$: Store<AppState>, private _route: ActivatedRoute) {
     this._connectionId = this._meetingService.clientConnectionID
     this._meetingService.initializeMeetingParams(this._route.snapshot)
@@ -93,14 +103,21 @@ export class MeetingComponent implements OnInit, OnDestroy {
   
   ngOnInit() {
     this._meetingService.listenForReadyEvent()
-  }
 
-  public sendDataChannelMessage(): void {
+    const element = document.getElementById('messages')
 
-    this._meetingService.sendDataChannelMessage(this.messageArea.value)
+    const observer = new MutationObserver(() => element.scrollTop = element.scrollHeight)
 
-    this.messageArea.setValue("")
+    this._meetingService.selectedChatroomUser$.pipe(
+      takeUntil(this._meetingService.destroy)
+    )
+    .subscribe((state: number) => {
+      this.selectedUser.setValue(state);
+      
+      this.isMessageTargetSelected = true
 
+      this._observeMessageChanges()
+    })
   }
 
   public changeVideo(deviceId: string, type: string): void {
@@ -122,10 +139,19 @@ export class MeetingComponent implements OnInit, OnDestroy {
   }
 
   public setSelectedUser(event: MatSelectChange): void {
-    this._meetingService.connectionId = this._meetingService.users[event.value].clientId
-    this.isMessageTargetSelected = !this.isMessageTargetSelected
+    this._meetingService.channelId = this._meetingService.users[event.value].clientId
+
+    // this._observeMessageChanges()
+
+    this.isMessageTargetSelected = true
+
     this._meetingService.tab = this._meetingService.users[event.value]
     this.selectedUser.setValue(event.value)
+
+    const index = this._meetingService.users.findIndex((user: IPayload) => user.clientId === this._meetingService.channelId)
+
+    this._meetingService.selectedChatroomUser = index
+
   }
 
   public closeTab(event: MouseEvent, index: number): void {
@@ -141,6 +167,13 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
   public trackByFn<K, V>(key: K, value: V): V {
     return value
+  }
+
+  private _observeMessageChanges(): void {
+    this.messages$ = this._store$.pipe(
+      select(selectMessages(this._meetingService.channelId)),
+      tap((messages: IMessage[]) => console.log(messages))
+    )
   }
   
   private _watchForMouseMovement(): void {
@@ -177,20 +210,6 @@ export class MeetingComponent implements OnInit, OnDestroy {
     .subscribe()
   }
 
-  public configureVideoConferenceMode(): void {
-
-    this.isDashboardHidden = true
-
-    this.videoContainer.nativeElement.style.display = 'inline-block'
-
-    this._observeMeetingEvents()
-
-    this._meetingService.configureVideoConferenceMode()
-    
-    this._watchForMouseMovement()
-
-  }
-
   private _observeMeetingEvents(): void {
     this._meetingService.mainVideoArea$.pipe(
       takeUntil(this._meetingService.destroy)
@@ -206,22 +225,35 @@ export class MeetingComponent implements OnInit, OnDestroy {
         this.smallVideoArea.nativeElement.srcObject = stream
       })
 
-    // this._meetingService.isVideoConferenceInactive$.pipe(
-    //   takeUntil(this._meetingService.destroy)
-    // )
-    //   .subscribe((state: boolean) => {
-    //     if (!state) {
-    //       this.mainVideoArea.nativeElement.srcObject = null
-    //       this.smallVideoArea.nativeElement.srcObject = null
-    //       this.videoContainer.nativeElement.style.display = 'none'
-    //     }
-    //   })
+    this._meetingService.isVideoConferenceActive$.pipe(
+      takeUntil(this._meetingService.destroy)
+    )
+      .subscribe((state: boolean) => {
+        if (!state) {
+          this.mainVideoArea.nativeElement.srcObject = null
+          this.smallVideoArea.nativeElement.srcObject = null
+          this.videoContainer.nativeElement.style.display = 'none'
+        }
+      })
   }
 
   public endVideoConference(): void {
     this._meetingService.endVideoConference()
     this.isVideoConferenceMode = !this.isVideoConferenceMode
     this.isDashboardHidden = false
+  }
+
+  public sendDataChannelMessage(): void {
+
+    if (!this._meetingService.channelId) {
+      alert("Please select a user from the selection")
+      return
+    }
+
+    this._meetingService.sendDataChannelMessage(this.messageArea.value)
+
+    this.messageArea.setValue("")
+
   }
 
   public sendDataChannelFile(event: any): void {
@@ -239,6 +271,20 @@ export class MeetingComponent implements OnInit, OnDestroy {
     }
 
     this._meetingService.sendDataChannelFile(event)
+
+  }
+
+  public configureVideoConferenceMode(): void {
+
+    this.isDashboardHidden = true
+
+    this.videoContainer.nativeElement.style.display = 'inline-block'
+
+    this._observeMeetingEvents()
+
+    this._meetingService.configureVideoConferenceMode()
+
+    this._watchForMouseMovement()
 
   }
 
