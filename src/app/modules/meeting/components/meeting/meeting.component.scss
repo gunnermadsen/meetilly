@@ -282,7 +282,7 @@ textarea {
 
 .message {
   max-width: 340px;
-  padding: 10px 15px;
+  padding: 8px 10px;
   margin: 5px;
   border-radius: 12px;
   word-wrap: break-word;
@@ -293,9 +293,32 @@ textarea {
   height: auto;
 }
 
-// .file-message {
-  
-// }
+.file-message {
+  width: 250px;
+  height: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.file-title {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px;
+}
+
+.file-menu {
+  padding: 0;
+}
+
+.file-name {
+  width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
 
 .message-input, .message-form {
   display: flex;

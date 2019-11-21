@@ -134,6 +134,18 @@ export class MeetingService {
         this._isSharingScreen.next(value)
     }
 
+    private _isDashboardHidden$: BehaviorSubject<boolean> = new BehaviorSubject<boolean>(false)
+    public get isDashboardHidden$(): Observable<boolean> {
+        return this._isDashboardHidden$.asObservable()
+    }
+    public get isDashboardHidden(): boolean {
+        return this._isDashboardHidden$.value
+    }
+    public set isDashboardHidden(value: boolean) {
+        this._isDashboardHidden$.next(value)
+    }
+    
+
     private _selectedChatroomUser: Subject<number> = new Subject<number>()
     public get selectedChatroomUser$(): Observable<number> {
         return this._selectedChatroomUser.asObservable()
@@ -610,10 +622,11 @@ export class MeetingService {
 
     private _handleDataChannelMessage(id: string, event: MessageEvent): void {
 
+        const index = this.users.findIndex((user: IPayload) => user.clientId === id)
+
         if (this.isFileTransfering) {
             
-            const userIndex = this.users.findIndex((user: IPayload) => user.clientId === id)
-            const message: IMessage = this._messages[userIndex].find((message: IMessage) => message.id === this._transferId)
+            const message: IMessage = this._messages[index].find((message: IMessage) => message.id === this._transferId)
             const progress = this._calculateFileTransferProgress(message.file.loaded, message.file.size)
             
             this._fileBuffer.push(event.data)
@@ -635,7 +648,6 @@ export class MeetingService {
 
         } else {
             const message = JSON.parse(event.data)
-            const index = this.users.findIndex((user: IPayload) => user.clientId === id)
             
             // this._store$.dispatch(createMessage({ message: message }))
             this.addMessage(message, index)
@@ -763,6 +775,8 @@ export class MeetingService {
 
         this._store$.dispatch(setMeetingViewState({ meetingViewState: false }))
 
+        this.isDashboardHidden = false
+
         // ** TODO ** (Optional)
         // if there are multiple meeting participants, we could set the srcElement to the next available 
         // participant, otherwise set the srcObject to null. more to come
@@ -771,7 +785,7 @@ export class MeetingService {
         
     }
 
-    //#endregion
+    // #endregion
 
 
     // #region Meeting Service Tools

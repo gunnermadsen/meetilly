@@ -43,9 +43,17 @@
                             
                                     <div [ngSwitch]="message.contentType">
                                         <div *ngSwitchCase="'file'">
-                                            <div class="file-name">
-                                                <a #downloadFile>{{ message.file.name }}</a>
+                                            <div class="file-title">
+                                                <div class="file-name">
+                                                    {{ message.file.name }}
+                                                </div>
+                                                <div class="file-actions">
+                                                    <button mat-icon-button class="file-menu" color="primary"><mat-icon>more_vert</mat-icon></button>
+                                                </div>
                                             </div>
+                                            <!-- <div class="file-icon">
+                                                <img [src]="generatePath(message.file.name)" />
+                                            </div> -->
                                             <div class="file-progress">
                                                 <div class="progress-bar">
                                                     <mat-progress-bar mode="determinate" [value]="message.file.progress"></mat-progress-bar>

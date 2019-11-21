@@ -65,6 +65,14 @@ export class MeetingComponent implements OnInit, OnDestroy {
     return this._meetingService.isSharingScreenMode
   }
 
+  public get isDashboardHidden(): boolean {
+    return this._meetingService.isDashboardHidden
+  }
+
+  public set isDashboardHidden(value: boolean) {
+    this._meetingService.isDashboardHidden = value
+  }
+
   public get cameraList(): MediaDeviceInfo[] {
     return this._meetingService.cameraList
   }
@@ -90,7 +98,6 @@ export class MeetingComponent implements OnInit, OnDestroy {
   public messageArea: FormControl = new FormControl()
   public messages$: Observable<IMessage[]>
   public isVideoConferenceMode: boolean = false
-  public isDashboardHidden: boolean = false
   public isMuted: boolean = false
   public isPaused: boolean = false
   public isSharingScreen: boolean = false
@@ -109,6 +116,8 @@ export class MeetingComponent implements OnInit, OnDestroy {
     )
     
     this._connectionId = this._meetingService.clientConnectionID
+    console.log(`**** Self-Generated Client ID set to: '${this._meetingService.clientConnectionID}'`)
+
     this._meetingService.initializeMeetingParams(this._route.snapshot)
     this._meetingService.initializeMeetingSignaling()
 
@@ -149,6 +158,12 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
   public getDeviceList(): void {
     this._meetingService.getDeviceList()
+  }
+
+  public generatePath(name: string): string {
+    // const server = "https://portfolioapis.herokuapp.com/"
+    const server = ""
+    return `http://localhost:3000/assets/icons/${name.split('.').pop()}`
   }
 
   public setSelectedUser(event: MatSelectChange): void {
@@ -244,7 +259,6 @@ export class MeetingComponent implements OnInit, OnDestroy {
   public endVideoConference(): void {
     this._meetingService.endVideoConference()
     this.isVideoConferenceMode = !this.isVideoConferenceMode
-    this.isDashboardHidden = false
   }
 
   public sendDataChannelMessage(): void {
