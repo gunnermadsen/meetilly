@@ -32,10 +32,12 @@ export class MeetingService {
     public microphoneList: MediaDeviceInfo[]
     private selectedConnectionId: string
     private _fileTransferQuene: any[] = []
-    private _fileBuffer: ArrayBuffer[];
+    private _fileBuffer: ArrayBuffer[] = [];
     private _meetingID: number = null
     public userName: string = null
     public userType: string = null
+    private _transferId: string;
+
     // #endregion
 
 
@@ -223,20 +225,23 @@ export class MeetingService {
     // #region Meeting Service Web RTC Peer Connection Signaling Handlers
 
     public initializeMeetingSignaling(): void {
-        merge(
-            this._socketService.timer$, 
-            this._socketService.ready$, 
-            this._socketService.signal$, 
-            this._socketService.closed$, 
-            this._socketService.standby$,
-            this._socketService.exchange$,
-            this._socketService.transfer$
+        const io = this._socketService
+
+        const signalingHandler$ = merge(
+            io.timer$, 
+            io.ready$, 
+            io.signal$, 
+            io.closed$, 
+            io.standby$,
+            io.exchange$,
+            io.transfer$
         )
         .pipe(
             map((payload: IPayload) => payload),
             takeUntil(this._destroy$)
         )
-        .subscribe((payload: any) => this._handleSocketMessageEvent(payload))
+        
+        signalingHandler$.subscribe((payload: any) => this._handleSocketMessageEvent(payload))
     }
 
     private _handleSocketMessageEvent(event: IPayload): void {
@@ -295,26 +300,27 @@ export class MeetingService {
         
         this.isStreamingReady.next(true)
 
-        const roomId = payload.roomId
-        const id = payload.clientId
+        const { roomId, clientId } = payload
+        const channelId = Object.keys(this.dataChannels).length
         
-        this._loggerService.logEvent(`---> ConnectionId set to ${id}`)
+        this._loggerService.logEvent(`---> ConnectionId set to ${clientId}`)
 
-        this.connections[id]                                = new RTCPeerConnection(peerConstraints)
+        this.connections[clientId]                                = new RTCPeerConnection(peerConstraints)
+        this.dataChannels[clientId]                               = this.connections[clientId]                       .createDataChannel(clientId, { negotiated: true, id: channelId })
 
-        this.dataChannels[id]                               = this.connections[id].createDataChannel(id, { negotiated: true, id: Object.keys(this.dataChannels).length })
+        this.dataChannels[clientId].onopen                        = this._handleDataChannelOnOpenEvent               .bind(this, clientId, roomId)
+        // this.connections[id].ondatachannel                     = this._handleDataChannelEvent                     .bind(this, clientId, roomId)
+        this.dataChannels[clientId].onclose                       = this._handleDataChannelStatusChange              .bind(this, clientId)
+        this.dataChannels[clientId].onerror                       = this._handleDataChannelError                     .bind(this, clientId)
 
-        this.dataChannels[id].onopen                        = this._handleDataChannelOnOpenEvent.bind(this, id, roomId)
-        // this.connections[id].ondatachannel                  = this._handleDataChannelEvent.bind(this, id, roomId)
-        this.connections[id].onicecandidate                 = this._handleICECandidateEvent.bind(this, id, roomId)
-        this.connections[id].oniceconnectionstatechange     = this._handleICEConnectionStateChangeEvent.bind(this, id, roomId)
-        this.connections[id].onicegatheringstatechange      = this._handleICEGatheringStateChangeEvent.bind(this, id, roomId)
-        this.connections[id].onsignalingstatechange         = this._handleSignalingStateChangeEvent.bind(this, id, roomId)
-        this.connections[id].onnegotiationneeded            = this._handleNegotiationNeededEvent.bind(this, id, roomId)
-        this.connections[id].ontrack                        = this._handleTrackEvent.bind(this, id)
+        this.connections[clientId].onicecandidate                 = this._handleICECandidateEvent                    .bind(this, clientId, roomId)
+        this.connections[clientId].oniceconnectionstatechange     = this._handleICEConnectionStateChangeEvent        .bind(this, clientId, roomId)
+        this.connections[clientId].onicegatheringstatechange      = this._handleICEGatheringStateChangeEvent         .bind(this, clientId, roomId)
+        this.connections[clientId].onsignalingstatechange         = this._handleSignalingStateChangeEvent            .bind(this, clientId, roomId)
+        this.connections[clientId].onnegotiationneeded            = this._handleNegotiationNeededEvent               .bind(this, clientId, roomId)
+        this.connections[clientId].ontrack                        = this._handleTrackEvent                           .bind(this, clientId)
 
-        this.user = { ...payload, clientId: id }
-
+        this.user = { ...payload, clientId: clientId }
     }
 
     private _handleICEGatheringStateChangeEvent(id: string): void {
@@ -503,15 +509,6 @@ export class MeetingService {
         }
     }
 
-    private _handleDataChannelEvent(id: string, roomId: string, event: RTCDataChannelEvent): void {
-        this._loggerService.logEvent(`---> Data Channel Initiated on ${this.oppositeUserType}`)
-        this.dataChannels[id] = event.channel
-        this.dataChannels[id].onopen = this._handleDataChannelStatusChange.bind(this, id)
-        this.dataChannels[id].onmessage = this._handleDataChannelMessage.bind(this, id)
-        this.dataChannels[id].onclose = this._handleDataChannelStatusChange.bind(this, id)
-        this.dataChannels[id].onerror = this._handleDataChannelError.bind(this, id)
-    }
-
     private _handleDataChannelStatusChange(id: string, event: Event): void {
         if (this.dataChannels[id]) {
             this._loggerService.logEvent(`Data channel's status has changed to ${this.dataChannels[id].readyState}`)
@@ -562,7 +559,7 @@ export class MeetingService {
         const id = this.selectedDataChannelId
         const chunkSize = 16384
         const user = this.users.find((user: IUser) => user.clientId === id)
-        const message = this._generateMessage('file', "File Transfer", { name: file.name, size: file.size, progress: 0 })
+        const message = this._generateMessage('file', "File Transfer", { name: file.name, size: file.size, progress: 0, buffer: [], loaded: 0 })
         const userIndex = this.users.findIndex((user: IPayload) => user.clientId === id)
 
         // this._store$.dispatch(createMessage({ message: message }))
@@ -571,6 +568,7 @@ export class MeetingService {
         // tell the targeted participant that a file sharing operation is in progress
         this._socketService.signal('filetransfer', {
             meetingId: this._meetingID,
+            clientId: this.channelId,
             roomId: user.roomId,
             member: this.userName,
             mode: 'transfer',
@@ -586,7 +584,7 @@ export class MeetingService {
 
             const reader = new FileReader()
 
-            reader.onload = (event: any) => {
+            reader.onload = ((event: any) => {
 
                 this.dataChannels[id].send(event.target.result)
 
@@ -595,15 +593,17 @@ export class MeetingService {
                 }
                 
                 const progress = this._calculateFileTransferProgress((offset + event.target.result.byteLength), file.size)
+                
+                this._messages[userIndex][messageIndex].file.progress = progress
 
-                this.messages[userIndex][messageIndex].file.progress = progress
-
-                // this.progress = progress
-            }
+            }).bind(this)
 
             const slice = file.slice(offset, (offset + chunkSize))
+            
             reader.readAsArrayBuffer(slice)
+
         }
+
         sliceFile(0)
         // this.fileTransfer = false
     }
@@ -611,28 +611,27 @@ export class MeetingService {
     private _handleDataChannelMessage(id: string, event: MessageEvent): void {
 
         if (this.isFileTransfering) {
-
-            const progress = this._calculateFileTransferProgress(event.data.byteLength, event.data.file.size)
-
-            // this._updateFileTransferState(progress, message.id)
-
+            
+            const userIndex = this.users.findIndex((user: IPayload) => user.clientId === id)
+            const message: IMessage = this._messages[userIndex].find((message: IMessage) => message.id === this._transferId)
+            const progress = this._calculateFileTransferProgress(message.file.loaded, message.file.size)
+            
             this._fileBuffer.push(event.data)
-            return
 
-            // this.fileLoaded += event.data.byteLength
+            message.file.progress = progress
+            message.file.buffer.push(event.data)
+            message.file.loaded += event.data.byteLength
 
-            // this.messages[] = this._calculateFileTransferProgress(this.fileLoaded, this.fileSize)
+            if (message.file.loaded === message.file.size) {
 
-            // if (this.fileLoaded === this.fileSize) {
+                this.isFileTransfering = false
 
-            //     this.isFileTransfering = false
+                const file = new Blob(this._fileBuffer)
 
-            //     const file = new Blob(this._fileBuffer)
+                // message.file.buffer = []
 
-            //     this._fileBuffer = []
-
-            //     return
-            // }
+                return
+            }
 
         } else {
             const message = JSON.parse(event.data)
@@ -655,7 +654,7 @@ export class MeetingService {
         } else {
             this._messages[index].push(message)
         }
-        return this._messages[index].length
+        return this._messages[index].length - 1
     }
 
     private _calculateFileTransferProgress(loaded: number, total: number): number {
@@ -687,21 +686,19 @@ export class MeetingService {
             file: file ? file : null,
             userType: this.userType, // client or host?
             timestamp: new Date(),
-            clientId: this.channelId
         }
     }
 
     private _setFileTransferState(event: IPayload): void {
         const index = this.users.findIndex((user: IPayload) => user.clientId === event.clientId)
-
-        this.isFileTransfering = event.data.transferInProgress
-        // this.fileSize = event.data.file.size
         const payload = event.data
 
-        this.channelId = event.data.clientId
+        this.isFileTransfering = payload.transferInProgress
+
+        this._transferId = event.data.id
 
         // this._store$.dispatch(createMessage({ message: payload }))
-        this.addMessage(payload.message, index)
+        this.addMessage(payload, index)
 
         this._configureChatRoom(payload, this.channelId, index)
     }

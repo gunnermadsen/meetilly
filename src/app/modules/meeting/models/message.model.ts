@@ -2,17 +2,18 @@ export interface FileMessage {
     name?: string
     size?: number
     progress: number
-    buffer: ArrayBuffer
+    loaded: number
+    buffer: ArrayBuffer[]
     result?: Blob
 }
 
 export interface IMessage {
-    id: string
     sender: string
+    id: string
     body: string
     contentType: string
     file?: FileMessage
     userType: string
-    clientId: string
+    clientId?: string
     timestamp: Date
 }

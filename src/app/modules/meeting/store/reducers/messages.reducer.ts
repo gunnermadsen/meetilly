@@ -6,7 +6,7 @@ import { v4 } from 'uuid'
 import { IMessage } from '../../models/message.model';
 
 export const adapter: EntityAdapter<IMessage> = createEntityAdapter<IMessage>({
-    selectId: (entity) => entity.id
+    selectId: (entity) => v4()
 })
 
 export const initialMeetingState: MessageState = adapter.getInitialState()
