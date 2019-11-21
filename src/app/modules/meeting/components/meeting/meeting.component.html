@@ -5,7 +5,7 @@
 
     <mat-sidenav-container class="sidenav-container">
 
-        <mat-sidenav #snav [mode]="'side'" [position]="'end'" [opened]="false">
+        <mat-sidenav #snav [mode]="sidenavMode$ | async" [position]="'end'" [opened]="false">
             <div class="message-container">
                 <div class="message-title">
                     <!-- <h3>Start a conversation</h3> -->
@@ -35,7 +35,7 @@
                                     <!-- <mat-divider *ngIf="messages.length"> {{ messages[0].timestamp | date : 'EEE, h' }} </mat-divider> -->
                                 </div>
                                 <div class="message" 
-                                    *ngFor="let message of messages$ | async; index as j" 
+                                    *ngFor="let message of messages[i]; index as j" 
                                     meetingMessage 
                                     [userType]="message.userType"
                                     [contentType]="message.contentType"

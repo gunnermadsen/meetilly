@@ -7,6 +7,7 @@ export interface FileMessage {
 }
 
 export interface IMessage {
+    id: string
     sender: string
     body: string
     contentType: string

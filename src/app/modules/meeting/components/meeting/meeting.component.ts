@@ -1,8 +1,8 @@
-import { Component, OnInit, ViewChild, ElementRef, OnDestroy, ViewChildren, QueryList } from '@angular/core'
+import { Component, OnInit, ViewChild, ElementRef, OnDestroy, ViewChildren, QueryList, ChangeDetectorRef } from '@angular/core'
 import { ActivatedRoute } from '@angular/router'
 import { FormControl } from '@angular/forms'
 
-import { takeUntil, tap, debounceTime, skipWhile, endWith } from 'rxjs/operators'
+import { takeUntil, tap, debounceTime, skipWhile, endWith, map } from 'rxjs/operators'
 import { Observable, fromEvent, BehaviorSubject, combineLatest, iif, of } from 'rxjs'
 import adapter from 'webrtc-adapter'
 
@@ -14,6 +14,7 @@ import { IUser } from '@/modules/meeting/models/users.model'
 import { IMessage } from '../../models/message.model'
 import { selectMessages } from '../../store/selectors/message.selectors'
 import { IPayload } from '@/modules/main/models/payload.model'
+import { BreakpointObserver, BreakpointState } from '@angular/cdk/layout';
 
 @Component({
   selector: 'app-meeting',
@@ -30,6 +31,10 @@ export class MeetingComponent implements OnInit, OnDestroy {
   public get displayControls$(): Observable<boolean> {
     return this._displayControls$.asObservable()
   }
+
+  // public get isMessengerOpen$(): Observable<boolean> {
+  //   return this._meetingService.
+  // }
 
   public get isStreamingReady$(): Observable<boolean> {
     return this._meetingService.isStreamingReady$
@@ -76,6 +81,10 @@ export class MeetingComponent implements OnInit, OnDestroy {
     return this._meetingService.tabs
   }
 
+  public get messages(): any[] {
+    return this._meetingService.messages
+  }
+
   public selectedUser: FormControl = new FormControl()
   public messageToggle: FormControl = new FormControl({ disabled: true })
   public messageArea: FormControl = new FormControl()
@@ -88,12 +97,17 @@ export class MeetingComponent implements OnInit, OnDestroy {
   public isMessageTargetSelected: boolean = false
   public isVoice: boolean = false
   private _connectionId: string
+  public sidenavMode$: Observable<string>
 
   public get oppositeUserType() {
     return this._meetingService.oppositeUserType
   }
 
-  constructor(private _meetingService: MeetingService, private _store$: Store<AppState>, private _route: ActivatedRoute) {
+  constructor(private _meetingService: MeetingService, private _store$: Store<AppState>, private _route: ActivatedRoute, private _cdr: ChangeDetectorRef, private _breakpointObserver: BreakpointObserver) {
+    this.sidenavMode$ = this._breakpointObserver.observe(['(max-width: 1000px)']).pipe(
+      map((state: BreakpointState) => state.matches === true ? 'over' : 'side')
+    )
+    
     this._connectionId = this._meetingService.clientConnectionID
     this._meetingService.initializeMeetingParams(this._route.snapshot)
     this._meetingService.initializeMeetingSignaling()
@@ -102,11 +116,6 @@ export class MeetingComponent implements OnInit, OnDestroy {
   }
   
   ngOnInit() {
-    this._meetingService.listenForReadyEvent()
-
-    const element = document.getElementById('messages')
-
-    const observer = new MutationObserver(() => element.scrollTop = element.scrollHeight)
 
     this._meetingService.selectedChatroomUser$.pipe(
       takeUntil(this._meetingService.destroy)
@@ -116,7 +125,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
       
       this.isMessageTargetSelected = true
 
-      this._observeMessageChanges()
+      this._cdr.detectChanges()
     })
   }
 
@@ -138,10 +147,12 @@ export class MeetingComponent implements OnInit, OnDestroy {
     this._meetingService.disableVideoCamera()
   }
 
+  public getDeviceList(): void {
+    this._meetingService.getDeviceList()
+  }
+
   public setSelectedUser(event: MatSelectChange): void {
     this._meetingService.channelId = this._meetingService.users[event.value].clientId
-
-    // this._observeMessageChanges()
 
     this.isMessageTargetSelected = true
 
@@ -167,13 +178,6 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
   public trackByFn<K, V>(key: K, value: V): V {
     return value
-  }
-
-  private _observeMessageChanges(): void {
-    this.messages$ = this._store$.pipe(
-      select(selectMessages(this._meetingService.channelId)),
-      tap((messages: IMessage[]) => console.log(messages))
-    )
   }
   
   private _watchForMouseMovement(): void {
