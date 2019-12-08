@@ -1,5 +1,5 @@
 export interface IPayload { 
-    meetingId: number 
+    meetingId: string 
     roomId?: string
     clientId?: string
     member?: string 

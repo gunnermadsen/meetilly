@@ -2,8 +2,8 @@ import { Component, OnInit, ViewChild, ElementRef, OnDestroy, ViewChildren, Quer
 import { ActivatedRoute } from '@angular/router'
 import { FormControl } from '@angular/forms'
 
-import { takeUntil, tap, debounceTime, skipWhile, endWith, map } from 'rxjs/operators'
-import { Observable, fromEvent, BehaviorSubject, combineLatest, iif, of } from 'rxjs'
+import { takeUntil, tap, debounceTime, skipWhile, map } from 'rxjs/operators'
+import { Observable, fromEvent, BehaviorSubject, combineLatest } from 'rxjs'
 import adapter from 'webrtc-adapter'
 
 import { MeetingService } from '@/modules/meeting/services/meeting.service'

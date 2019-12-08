@@ -30,10 +30,9 @@ export class MeetingService {
     public speakerList: MediaDeviceInfo[]
     public cameraList: MediaDeviceInfo[]
     public microphoneList: MediaDeviceInfo[]
-    private selectedConnectionId: string
     private _fileTransferQuene: any[] = []
     private _fileBuffer: ArrayBuffer[] = [];
-    private _meetingID: number = null
+    private _meetingID: string = null
     public userName: string = null
     public userType: string = null
     private _transferId: string;
@@ -42,13 +41,6 @@ export class MeetingService {
 
 
     // #region Meeting Service API accessors
-    private _transferProgress$: Subject<number> = new Subject<number>()
-    public get progress$(): Observable<number> {
-        return this._transferProgress$.asObservable()
-    }
-    public set progress(value: number) {
-        this._transferProgress$.next(value)
-    }
 
     private _users$: BehaviorSubject<IUser[]> = new BehaviorSubject<IUser[]>([])
     public get users$(): Observable<IUser[]> {
@@ -73,11 +65,7 @@ export class MeetingService {
     public get messages(): any[] {
         return this._messages
     }
-    /**
-     * BehaviorSubject for tracking the state of the video conference, 
-     * whether two or more meeting participatns are active in a meeting.
-     * Used as a declarative method of unsubscribing to observables
-     */
+    
     private _isVideoConferenceActive$: Subject<boolean> = new Subject<boolean>()
     public get isVideoConferenceActive$(): Observable<boolean> {
         return this._isVideoConferenceActive$.asObservable()
@@ -154,19 +142,20 @@ export class MeetingService {
         this._selectedChatroomUser.next(value)
     }
 
+    private _selectedConnectionId: string
     public get connectionId(): string {
-        return this.selectedConnectionId
+        return this._selectedConnectionId
     }
     public set connectionId(value: string) {
-        this.selectedConnectionId = value
+        this._selectedConnectionId = value
     }
 
-    private selectedDataChannelId: string
+    private _selectedDataChannelId: string
     public get channelId(): string {
-        return this.selectedDataChannelId
+        return this._selectedDataChannelId
     }
     public set channelId(value: string) {
-        this.selectedDataChannelId = value
+        this._selectedDataChannelId = value
     }
 
     private readonly _connectionId: string = uuid.v4()
@@ -213,6 +202,8 @@ export class MeetingService {
         this.userName = snapshot.queryParams.member
         this.userType = snapshot.queryParams.mode
         this.oppositeUserType = this.userType === 'host' ? 'guest' : 'host'
+
+        // this._socketService.setNamespace(this._meetingID)
     }
 
     public checkForReadiness(roomId: string | null): void {
@@ -237,23 +228,7 @@ export class MeetingService {
     // #region Meeting Service Web RTC Peer Connection Signaling Handlers
 
     public initializeMeetingSignaling(): void {
-        const io = this._socketService
-
-        const signalingHandler$ = merge(
-            io.timer$, 
-            io.ready$, 
-            io.signal$, 
-            io.closed$, 
-            io.standby$,
-            io.exchange$,
-            io.transfer$
-        )
-        .pipe(
-            map((payload: IPayload) => payload),
-            takeUntil(this._destroy$)
-        )
-        
-        signalingHandler$.subscribe((payload: any) => this._handleSocketMessageEvent(payload))
+        this._socketService.event$.pipe(takeUntil(this._destroy$)).subscribe((payload: IPayload) => this._handleSocketMessageEvent(payload))
     }
 
     private _handleSocketMessageEvent(event: IPayload): void {
@@ -568,7 +543,7 @@ export class MeetingService {
     public sendDataChannelFile(changeEvent: any): void {
 
         const file: File = changeEvent.target.files[0]
-        const id = this.selectedDataChannelId
+        const id = this.channelId
         const chunkSize = 16384
         const user = this.users.find((user: IUser) => user.clientId === id)
         const message = this._generateMessage('file', "File Transfer", { name: file.name, size: file.size, progress: 0, buffer: [], loaded: 0 })
@@ -963,6 +938,6 @@ export class MeetingService {
         }
     }
 
-    //#endregion
+    // #endregion
 
 }
