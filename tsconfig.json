@@ -1,8 +1,6 @@
 {
   "compileOnSave": false,
-  "exclude": [
-    "./node_modules/@types/webrtc"
-  ],
+  
   "compilerOptions": {
     "baseUrl": "./src",
     "paths": {
@@ -23,8 +21,7 @@
     "importHelpers": true,
     "target": "es2015",
     "typeRoots": [
-      "node_modules/@types",
-      "types/webrtc"
+      "node_modules/@types"
     ],
     "lib": [
       "es2018",

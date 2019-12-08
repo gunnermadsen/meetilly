@@ -1,6 +1,6 @@
-# ScreenShare
+# Meetilly Collaboration Tool
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 7.3.9.
+Meetilly is a meeting and collaboration tool that offers Videoconferencing, Screensharing, and messaging for meeting participants. Currently only two participants per room is allowed. Adding a third member to a meeting will trigger  incorrect WebRTC handshaking and ice candidate exchanging. However, I am planning to setup multiple participant meetings. More to come!
 
 ## Development server
 
@@ -25,3 +25,7 @@ Run `ng e2e` to execute the end-to-end tests via [Protractor](http://www.protrac
 ## Further help
 
 To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI README](https://github.com/angular/angular-cli/blob/master/README.md).
+
+
+## Additional Information
+If you like this application, please visit my [Portfolio] (https://www.gunner-madsen.com) to view more of my projects. I thank you for checking them out
