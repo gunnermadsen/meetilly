@@ -15,7 +15,7 @@
     "build:client-and-server-bundles": "ng build --prod && ng run meetilly:server:production --bundleDependencies all",
     "build:compile:server": "webpack --config webpack.server.config.js --progress --colors",
     "serve:ssr": "node dist/server",
-    "heroku-postbuild": "npm run build:ssr"
+    "postinstall": "npm run build:ssr"
   },
   "engines": {
     "node": "12.8.0",
