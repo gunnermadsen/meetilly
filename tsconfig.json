@@ -1,5 +1,8 @@
 {
   "compileOnSave": false,
+  "exclude": [
+    "./node_modules/@types/webrtc"
+  ],
   "compilerOptions": {
     "baseUrl": "./src",
     "paths": {
@@ -18,10 +21,10 @@
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "importHelpers": true,
-    "target": "es5",
+    "target": "es2015",
     "typeRoots": [
       "node_modules/@types",
-      "types"
+      "types/webrtc"
     ],
     "lib": [
       "es2018",

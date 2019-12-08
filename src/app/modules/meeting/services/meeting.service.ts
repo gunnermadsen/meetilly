@@ -848,7 +848,8 @@ export class MeetingService {
         }
 
         try {
-            this.displayStreams[id] = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+            const devices: any = navigator.mediaDevices
+            this.displayStreams[id] = await devices.getDisplayMedia({ video: true, audio: false })
             this._loggerService.logEvent(`---> Display media has been set`)
 
             this.isSharingScreen = true
