@@ -21,8 +21,8 @@ const routes: Routes = [
   },
   {
     path: 'meeting',
-    loadChildren: () => import('./modules/meeting/meeting.module').then(mod => mod.MeetingModule),
     canActivate: [AuthGuardService],
+    loadChildren: () => import('./modules/meeting/meeting.module').then(mod => mod.MeetingModule),
     resolve: {
       result: MeetingVerificationResolver
     }

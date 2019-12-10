@@ -2,6 +2,8 @@
 
 Meetilly is a meeting and collaboration tool that offers Videoconferencing, Screensharing, and messaging for meeting participants. Currently only two participants per room is allowed. Adding a third member to a meeting will trigger  incorrect WebRTC handshaking and ice candidate exchanging. However, I am planning to setup multiple participant meetings. More to come!
 
+Available from my [Portfolio](https://www.gunner-madsen.com)
+
 ## Development server
 
 Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The app will automatically reload if you change any of the source files.
