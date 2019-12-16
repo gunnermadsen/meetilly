@@ -13,10 +13,10 @@ import { authenticateUserRequested } from '@/core/authentication/store/actions/a
   styleUrls: ['./login.component.less']
 })
 export class LoginComponent implements OnInit {
-  loginForm: FormGroup;
-  loading: boolean = false;
-  submitted: boolean = false;
-  returnUrl: string;
+  public loginForm: FormGroup;
+  public loading: boolean = false;
+  public submitted: boolean = false;
+  public returnUrl: string;
   constructor(private formBuilder: FormBuilder, private store: Store<AppState>, private router: Router) {}
 
   ngOnInit() {

@@ -757,6 +757,7 @@ export class MeetingService {
         // participant, otherwise set the srcObject to null. more to come
 
         this.isVideoConferenceActive = false
+        this.timeCounter = null
         
     }
 
