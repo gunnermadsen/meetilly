@@ -1,6 +1,6 @@
 export const sizeConstraints = {
-    width: { min: 1280, ideal: 1280, max: 1920 },
-    height: { min: 720, ideal: 720, max: 1080 }
+    width: { min: 1280, ideal: 1920, max: 4096 },
+    height: { min: 720, ideal: 1080, max: 2160 }
 }
 
 export const peerConstraints = {

@@ -7,6 +7,11 @@ export class LoggerService {
         console.log(`[${time.toLocaleTimeString()}] ${text}`)
     }
 
+    public logObject(text: string, object: any): void {
+        const time = new Date()
+        console.log(`[${time.toLocaleTimeString()}] ${text}:`, object)
+    }
+
     public logError(text: any): void {
         const time = new Date()
         console.error(`[${time.toLocaleTimeString()}] ${text}`)

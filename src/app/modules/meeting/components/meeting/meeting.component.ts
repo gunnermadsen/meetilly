@@ -116,12 +116,12 @@ export class MeetingComponent implements OnInit, OnDestroy {
     )
     
     this._connectionId = this._meetingService.clientConnectionID
-    console.log(`**** Self-Generated Client ID set to: '${this._meetingService.clientConnectionID}'`)
+    // console.log(`**** Self-Generated Client ID set to: '${this._meetingService.clientConnectionID}'`)
 
     this._meetingService.initializeMeetingParams(this._route.snapshot)
     this._meetingService.initializeMeetingSignaling()
 
-    this._meetingService.checkForReadiness(null)
+    this._meetingService.checkForReadiness({ clientId: null, roomId: null })
   }
   
   ngOnInit() {
@@ -302,7 +302,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
     this._meetingService.configureVideoConferenceMode()
 
-    this._watchForMouseMovement()
+    // this._watchForMouseMovement()
 
   }
 
@@ -315,13 +315,6 @@ export class MeetingComponent implements OnInit, OnDestroy {
   public configureCallType(type: string): void {
     this.isVoice = !this.isVoice
     this._meetingService.configureCallType(type)
-  }
-
-  public getMessages$(clientId: string): Observable<IMessage[]> {
-    return this._store$.pipe(
-      select(selectMessages(clientId)),
-      tap((messages: IMessage[]) => console.log(messages))
-    )
   }
 
   ngOnDestroy() {

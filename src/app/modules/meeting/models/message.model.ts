@@ -9,7 +9,7 @@ export interface FileMessage {
 
 export interface IMessage {
     sender: string
-    id: string
+    messageId: string
     body: string
     contentType: string
     file?: FileMessage

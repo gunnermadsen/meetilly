@@ -1,5 +1,8 @@
 // Global Component Styles for Meeting Component
-.video-container, .video-wrap, .main-video, video,
+.video-container, 
+.video-wrap, 
+.main-video, 
+video,
 .meeting-container,
 .message-container,
 .meeting-dashboard,
@@ -13,6 +16,16 @@
   // flex-direction: column;
   position: relative;
 }
+
+.sidenav__container {
+
+  &-messenger {
+    .messenger-title {
+      
+    }
+  }
+}
+
 
 h2 {
   margin-bottom: 5px;
@@ -295,7 +308,7 @@ textarea {
 
 .file-message {
   width: 250px;
-  height: 80px;
+  height: auto;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -315,8 +328,9 @@ textarea {
 
 .file-name {
   width: 100%;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-wrap: break-word;
+  // text-overflow: ellipsis;
+  // white-space: nowrap;
   overflow: hidden;
 }
 

@@ -1,27 +1,23 @@
-import { Injectable, ComponentRef } from '@angular/core'
+import { Injectable } from '@angular/core'
 import { Observable, merge, Subject, BehaviorSubject, interval } from 'rxjs'
 import { IPayload } from '../../main/models/payload.model'
 import { takeUntil, map } from 'rxjs/operators'
 import { DataChannelConnections, WebcamStreams, DisplayStreams, PeerConnections } from '../models/meeting.model'
 import * as uuid from 'uuid'
-import { MeetingComponent } from '../components/meeting/meeting.component'
-import { Store, select } from '@ngrx/store'
+import { Store } from '@ngrx/store'
 import { AppState } from '@/reducers'
-import { createMessage, updateFileTransferState } from '../store/actions/message.actions'
-import { IMessage, FileMessage } from '../models/message.model'
+import { IMessage } from '../models/message.model'
 import { LoggerService } from './logger.service'
 import { ToastrService } from 'ngx-toastr'
 import { sizeConstraints, peerConstraints } from '../components/meeting/constraints'
 import { IUser } from '../models/users.model'
 import { SocketService } from './socket.service'
 import { setMeetingViewState } from '@/modules/main/store/actions/meeting.actions'
-import { Update } from '@ngrx/entity';
 
 @Injectable({ providedIn: 'root' })
 export class MeetingService {
 
     // #region Meeting Service Properties
-    private _componentRef: ComponentRef<MeetingComponent>
     public dataChannels: DataChannelConnections = {}
     public webcamStreams: WebcamStreams = {}
     public displayStreams: DisplayStreams = {}
@@ -50,8 +46,11 @@ export class MeetingService {
         return this._users$.value
     }
     public set user(value: IUser) {
-        const duplicates: IUser[] = this._users$.value.filter(
-            (user: IUser) => user.clientId === value.clientId && user.member === value.member
+        const duplicates: IUser[] = this.users.filter(
+            (user: IUser) => 
+                user.clientId === value.clientId && 
+                user.member === value.member && 
+                user.sender === value.sender
         )
 
         if (!duplicates.length) {
@@ -206,16 +205,15 @@ export class MeetingService {
         // this._socketService.setNamespace(this._meetingID)
     }
 
-    public checkForReadiness(roomId: string | null): void {
+    public checkForReadiness(payload: IPayload): void {
         //check the socket server to see if there are other meetting participants
         // on this signal, we obtain a socket id
-        this._loggerService.logEvent(`**** ${this.userType} sending 'standby' event. Socket ID has not been set`)
-
+        this._loggerService.logEvent(`**** ${this.userType} sending 'standby' event. Client Id set to ${payload.clientId}`)
         this._socketService.signal('standby', {
             meetingId: this._meetingID,
-            clientId: this._connectionId,
+            clientId: payload.clientId,
             mode: "waiting",
-            roomId: roomId,
+            roomId: payload.roomId,
             sender: this.userType,
             receiver: this.oppositeUserType,
             member: this.userName
@@ -235,7 +233,7 @@ export class MeetingService {
 
         switch (event.mode) {
             case "waiting":
-                this.checkForReadiness(event.roomId)
+                this.checkForReadiness(event)
                 break
 
             case "signaling":
@@ -262,7 +260,7 @@ export class MeetingService {
 
             case "closed":
                 if (this.connections[event.clientId]) {
-                    this.checkForReadiness(event.roomId)
+                    this.checkForReadiness(event)
                     this._initializePeerConnection(event)
                 }
                 break
@@ -285,6 +283,8 @@ export class MeetingService {
 
         this._loggerService.logEvent(`**** Creating New RTC Peer Connection for ${this.userType}`)
         
+        this._loggerService.logObject('---> Payload received', payload)
+
         this.isStreamingReady.next(true)
 
         const { roomId, clientId } = payload
@@ -344,8 +344,8 @@ export class MeetingService {
             case "closed":
             case "disconnected":
                 if (this.connections[id]) {
-                    this.endVideoConference()
-                    this.closeMeetingConnection()
+                    // this.endVideoConference(id)
+                    this.closeMeetingConnection(id)
                 }
                 break
         }
@@ -353,7 +353,7 @@ export class MeetingService {
 
     private _handleICECandidateEvent(id: string, roomId: string, event: RTCPeerConnectionIceEvent): void {
         if (event.candidate) {
-            this._loggerService.logEvent(`**** Outgoing ICE candidate: ${event.candidate.candidate}`)
+            this._loggerService.logEvent(`**** Sending ICE candidate: under client id: ${id}`)
 
             this._socketService.signal('signal', {
                 meetingId: this._meetingID,
@@ -376,7 +376,7 @@ export class MeetingService {
         try {
             const offer = await this.connections[id].createOffer({ iceRestart: mode })
 
-            this._loggerService.logEvent(`---> Offer Created: ${offer.sdp}`)
+            // this._loggerService.logEvent(`---> Offer Created: ${offer.sdp}`)
 
             if (this.connections[id].signalingState !== "stable") {
                 this._loggerService.logEvent(`---> Signaling state is unstable.`)
@@ -384,7 +384,7 @@ export class MeetingService {
             }
 
             await this.connections[id].setLocalDescription(offer)
-            this._loggerService.logEvent("---> Set local description to the offer")
+            this._loggerService.logEvent(`---> Set local description to the offer using id: ${id}`)
 
             this._socketService.signal('signal', {
                 meetingId: this._meetingID,
@@ -406,9 +406,9 @@ export class MeetingService {
     private async _handleNewICECandidateMessage(payload: IPayload): Promise<void> {
 
         const candidate: RTCIceCandidate = new RTCIceCandidate(payload.data)
-        this._loggerService.logEvent(`**** Adding received ICE candidate: ${candidate.candidate}`)
-
         const id = payload.clientId
+
+        this._loggerService.logEvent(`**** Adding received ICE candidate under client id: ${id}`)
 
         try {
             if (candidate) {
@@ -424,7 +424,7 @@ export class MeetingService {
 
     private async _handleOfferMessage(message: IPayload): Promise<void> {
 
-        this._loggerService.logEvent(`**** Received video chat offer from ${this.oppositeUserType}`)
+        this._loggerService.logEvent(`**** Received offer from ${this.oppositeUserType}`)
 
         const id = message.clientId
 
@@ -461,7 +461,7 @@ export class MeetingService {
                 this._loggerService.logEvent("---> Creating and Sending Answer to Caller")
                 const answer: RTCSessionDescriptionInit = await this.connections[id].createAnswer()
 
-                this._loggerService.logEvent("---> Setting Answer to Local Description")
+                this._loggerService.logEvent(`---> Setting Answer to Local Description using id: ${id}`)
                 await this.connections[id].setLocalDescription(answer)
 
                 this._socketService.signal('signal', {
@@ -595,13 +595,13 @@ export class MeetingService {
         // this.fileTransfer = false
     }
 
-    private _handleDataChannelMessage(id: string, event: MessageEvent): void {
+    private _handleDataChannelMessage(clientId: string, event: MessageEvent): void {
 
-        const index = this.users.findIndex((user: IPayload) => user.clientId === id)
+        const index = this.users.findIndex((user: IPayload) => user.clientId === clientId)
 
         if (this.isFileTransfering) {
             
-            const message: IMessage = this._messages[index].find((message: IMessage) => message.id === this._transferId)
+            const message: IMessage = this._messages[index].find((message: IMessage) => message.messageId === this._transferId)
             const progress = this._calculateFileTransferProgress(message.file.loaded, message.file.size)
             
             this._fileBuffer.push(event.data)
@@ -626,7 +626,7 @@ export class MeetingService {
             
             // this._store$.dispatch(createMessage({ message: message }))
             this.addMessage(message, index)
-            this._configureChatRoom(message, id, index)
+            this._configureChatRoom(message, clientId, index)
             
             this._loggerService.logEvent(`**** DataChannel Message Received: ${event.data}`)
             this._toastrService.info(`New message from ${message.sender} (${message.userType})`)
@@ -648,13 +648,13 @@ export class MeetingService {
         return Math.round(loaded / total * 100)
     }
 
-    private _configureChatRoom(message: IMessage, id: string, index): void {
+    private _configureChatRoom(message: IMessage, clientId: string, index): void {
 
         // Note on this condition: if there are multiple users in a meeting, 
         // even if the selected channel id changes, the channelId property 
         // will stil be set
         if (!this.channelId) {
-            this.channelId = message.clientId
+            this.channelId = clientId
             this.selectedChatroomUser = index
         }
 
@@ -668,7 +668,7 @@ export class MeetingService {
         return {
             sender: this.userName, // the username of the participant sending the message
             body: body,
-            id: uuid.v4(),
+            messageId: uuid.v4(),
             contentType: contentType,
             file: file ? file : null,
             userType: this.userType, // client or host?
@@ -702,10 +702,11 @@ export class MeetingService {
         this._toastrService.info(`${payload.member} (${payload.member}) has left the meeting`)
     }
 
-    public endVideoConference(): void {
+    public endVideoConference(id?: string): void {
+        let connId = id || this.connectionId
         this._loggerService.logEvent("**** Closing the videoconference")
 
-        const user = this.users.find((user: IUser) => user.clientId === this.connectionId)
+        const user = this.users.find((user: IUser) => user.clientId === connId)
 
         // if there is only one other user, close the meeting entirely
         if (this.users.length === 1) {
@@ -723,22 +724,23 @@ export class MeetingService {
         })
     }
 
-    public closeMeetingConnection(): void {
-        if (this.connections[this.connectionId]) {
+    public closeMeetingConnection(id?: string): void {
+        const connId = id || this.connectionId
+
+        if (this.connections[connId]) {
             this._loggerService.logEvent("**** Closing the peer connection and datachannel")
-            const that = this
 
-            this.users.forEach((user: IUser, index: number) => {
-                const id = user.clientId
+            this.stopTracks(connId)
+            this.connections[connId].close()
+            this.dataChannels[connId].close()
+            delete this.connections[connId]
+            delete this.dataChannels[connId]
+            delete this.webcamStreams[connId]
+            delete this.displayStreams[connId]
 
-                that.stopTracks(id)
-                that.connections[id].close() 
-                that.dataChannels[id].close()
-                that.connections[id] = null
-                that.dataChannels = null
-                that.webcamStreams[id] = null
-                that.displayStreams[id] = null
-            })
+            this._users$.next([])
+            this._messages = []
+            this._tabs = []
         }
     }
 
