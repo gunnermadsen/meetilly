@@ -302,7 +302,7 @@ export class MeetingComponent implements OnInit, OnDestroy {
 
     this._meetingService.configureVideoConferenceMode()
 
-    // this._watchForMouseMovement()
+    this._watchForMouseMovement()
 
   }
 
