@@ -9,47 +9,56 @@
 
     <mat-divider></mat-divider>
 
-    <div class="chatroom-details">
+    <div class="chatroom__details">
 
-        <div class="chatroom-join">
+        <div class="details__join">
             <mat-card>
                 <form [formGroup]="form">
-                    <div class="join-title">
+                    <div class="details__join-title">
                         <h4>Join a Chatroom</h4>
+                        <mat-divider></mat-divider>
                     </div>
-                    <mat-form-field appearance="outline">
-                        <mat-label>Enter the Chatroom Number</mat-label>
-                        <input matInput formControlName="MeetingNumber">
-                    </mat-form-field>
-                    <div class="join-actions">
-                        <button mat-raised-button (click)="joinMeetingAsGuest()" color="primary">Join Meeting</button>
+                    <div class="details__join-input">
+                        <mat-form-field appearance="outline">
+                            <mat-label>Enter the Chatroom Number</mat-label>
+                            <input matInput formControlName="MeetingNumber">
+                        </mat-form-field>
+                        <div class="details__join-actions">
+                            <button mat-raised-button (click)="joinMeetingAsGuest()" color="primary">Join Meeting</button>
+                        </div>
                     </div>
                 </form>
             </mat-card>
         </div>
     
-        <div class="chatroom-list">
+        <div class="details__list">
             <mat-card>
                 <div class="list-title">
                     <h4>Meetings</h4>
                     <mat-divider></mat-divider>
                 </div>
-                <div class="meetings">
-                    <div class="meeting" *ngFor="let meeting of (meetings$ | async); index as i">
+                <div class="meetings" *ngIf="(meetings$ | async) as meetings">
+                    <div class="meeting" *ngFor="let meeting of meetings; index as i">
                         <div class="list-item">
                             <div class="meeting-name">{{ meeting.Name }}</div>
+                            <div class="meeting-code">{{ meeting.Code }}</div>
                             <mat-menu #menu="matMenu">
                                 <button mat-menu-item (click)="startMeetingAsHost($event, meeting.Code)">Start meeting</button>
                                 <mat-divider></mat-divider>
-                                <button mat-menu-item>Delete</button>
-                                <button mat-menu-item>Edit</button>
+                                <button mat-menu-item (click)="deleteMeeting(meeting)">Delete</button>
+                                <button mat-menu-item (click)="editMeeting(meeting)">Edit</button>
                             </mat-menu>
                             <button class="item-button" mat-icon-button [matMenuTriggerFor]="menu">
                                 <mat-icon>more_vert</mat-icon>
                             </button>
                         </div>
                         <mat-divider *ngIf="i < (meetings$ | async).length - 1"></mat-divider>
-                    </div> 
+                    </div>
+                    <div *ngIf="!meetings.length">
+                        <div class="meeting">
+                            <h4>You have no meetings. Click create new meeting +, to add a new meeting</h4>
+                        </div>
+                    </div>
                 </div>
             </mat-card>
         </div>

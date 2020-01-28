@@ -88,6 +88,14 @@ export class MainComponent implements OnInit {
     // this._openWindow('guest', meetingId)
   }
 
+  public deleteMeeting(meeting: IMeeting): void {
+    console.log(meeting)
+  }
+
+  public editMeeting(meeting: IMeeting): void {
+    console.log(meeting)
+  }
+
   private _openWindow(mode: string, meetingId: string, connectionId?: string): void {
     window.open(`/meeting?mode=${mode}&meetingId=${meetingId}&member=${this._userName}`, "_blank", "width=1500, height=1000") // &connectionId=${connectionId}
   }

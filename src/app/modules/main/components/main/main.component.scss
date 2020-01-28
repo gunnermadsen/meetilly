@@ -42,16 +42,21 @@ h2, h4 {
 }
 
 
-
-
-.chatroom-join {
+.details__join {
     margin-right: 10px;
     width: 450px;
-}
 
-.join-actions {
-    display: flex;
-    justify-content: flex-end;
+    &-title {}
+
+    &-input {
+        margin-top: 10px;
+    }
+
+    &-actions {
+        display: flex;
+        justify-content: flex-end;
+    }
+    
 }
 
 .chatroom-create {
@@ -63,7 +68,7 @@ h2, h4 {
 
 // Meeting List Styles
 
-.chatroom-details {
+.chatroom__details {
     display: flex;
     flex-direction: row;
     justify-content: space-between;
@@ -103,7 +108,7 @@ h2, h4 {
 }
 
 
-.chatroom-join, .chatroom-list  {
+.details__join, .details__list  {
     width: 50%;
 }
 
